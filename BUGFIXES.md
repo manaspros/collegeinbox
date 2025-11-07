@@ -1,7 +1,7 @@
 # Bug Fixes Report - Collegiate Inbox Navigator
 
 ## Summary
-Fixed 10 critical bugs that were preventing proper integration with Composio, breaking the OAuth flow, causing disconnect errors, preventing chat input, and causing potential runtime errors.
+Fixed 11 critical bugs that were preventing proper integration with Composio, breaking the OAuth flow, causing disconnect errors, preventing chat input, and causing potential runtime errors.
 
 ---
 
@@ -257,6 +257,58 @@ if (loading) {
   autoComplete="off"
 />
 ```
+
+---
+
+### 11. ✅ Wrong API Method for OAuth Connection
+**Location:** `lib/composio.ts:34-67`
+
+**Issue:** Using `entity.initiateConnection()` which doesn't exist in Composio SDK v0.5.39. According to official documentation, should use `composio.connectedAccounts.initiate()` instead.
+
+**Impact:** ALL OAuth connection attempts failed with validation error:
+```
+Error [ComposioError]: 🚫 Bad Request. Validation Errors: undefined
+```
+
+**Fix:** Changed to use the correct Composio API method according to official documentation.
+
+**Changes:**
+1. Replaced `entity.initiateConnection()` with `composio.connectedAccounts.initiate()`
+2. Added `APP_INTEGRATION_MAP` to map app names to Composio integration IDs (e.g., "gmail" → "GMAIL")
+3. Updated parameters to match SDK requirements:
+   - `userId` instead of entity object
+   - `integrationId` instead of `appName`
+   - `redirectUrl` (camelCase) is correct for this method
+
+```typescript
+// Before (WRONG):
+const entity = await getComposioEntity(firebaseUid);
+const connection = await entity.initiateConnection({
+  appName: app,
+  redirect_url: redirectUrl || `${process.env.NEXT_PUBLIC_APP_URL}/integrations`,
+});
+return connection.redirectUrl;
+
+// After (CORRECT):
+const APP_INTEGRATION_MAP: Record<string, string> = {
+  gmail: "GMAIL",
+  googleclassroom: "GOOGLECLASSROOM",
+  googlecalendar: "GOOGLECALENDAR",
+  googledrive: "GOOGLEDRIVE",
+  whatsapp: "WHATSAPP",
+  telegram: "TELEGRAM",
+};
+
+const integrationName = APP_INTEGRATION_MAP[app.toLowerCase()] || app.toUpperCase();
+const connectionRequest = await composio.connectedAccounts.initiate({
+  userId: firebaseUid,
+  integrationId: integrationName,
+  redirectUrl: redirectUrl || `${process.env.NEXT_PUBLIC_APP_URL}/integrations`,
+});
+return connectionRequest.redirectUrl;
+```
+
+**Reference:** [Composio Authentication Documentation](https://docs.composio.dev/docs/authenticating-tools)
 
 ---
 
