@@ -31,23 +31,35 @@ export async function hasConnection(firebaseUid: string, app: string) {
   }
 }
 
-// Get connection URL for OAuth
+// Map of app names to their Composio integration names
+const APP_INTEGRATION_MAP: Record<string, string> = {
+  gmail: "GMAIL",
+  googleclassroom: "GOOGLECLASSROOM",
+  googlecalendar: "GOOGLECALENDAR",
+  googledrive: "GOOGLEDRIVE",
+  whatsapp: "WHATSAPP",
+  telegram: "TELEGRAM",
+};
+
+// Get connection URL for OAuth using Composio's hosted authentication
 export async function getConnectionLink(
   firebaseUid: string,
   app: string,
   redirectUrl?: string
 ) {
   try {
-    const entity = await getComposioEntity(firebaseUid);
+    // Use Composio's hosted authentication flow (link method)
+    // This automatically handles auth configs for common apps
+    const integrationName = APP_INTEGRATION_MAP[app.toLowerCase()] || app.toUpperCase();
 
-    // Composio expects redirect_url (with underscore), not redirectUrl
-    const connection = await entity.initiateConnection({
-      appName: app,
-      redirect_url: redirectUrl || `${process.env.NEXT_PUBLIC_APP_URL}/integrations`,
+    const connectionRequest = await composio.connectedAccounts.initiate({
+      userId: firebaseUid,
+      integrationId: integrationName,
+      redirectUrl: redirectUrl || `${process.env.NEXT_PUBLIC_APP_URL}/integrations`,
     });
 
-    // The response has redirectUrl (camelCase) - this is the OAuth URL
-    return connection.redirectUrl;
+    // The response has redirectUrl - this is the OAuth URL
+    return connectionRequest.redirectUrl;
   } catch (error) {
     console.error("Error generating connection link:", error);
     throw error;
