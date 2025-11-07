@@ -1,7 +1,7 @@
 # Bug Fixes Report - Collegiate Inbox Navigator
 
 ## Summary
-Fixed 6 critical bugs that were preventing proper integration with Composio, breaking the OAuth flow, and causing potential runtime errors.
+Fixed 7 critical bugs that were preventing proper integration with Composio, breaking the OAuth flow, and causing potential runtime errors.
 
 ---
 
@@ -116,7 +116,37 @@ Variables included:
 
 ---
 
-### 6. ✅ Composio Initialization Pattern Verified
+### 6. ✅ Incorrect Parameter Name in initiateConnection
+**Location:** `lib/composio.ts:44-46`
+
+**Issue:** The `initiateConnection` method was called with `redirectUrl` (camelCase) but Composio API v0.5.39 expects `redirect_url` (snake_case).
+
+**Impact:** ALL OAuth connection attempts failed with validation error:
+```
+Error [ComposioError]: 🚫 Bad Request. Validation Errors: undefined
+```
+
+**Fix:** Changed parameter from `redirectUrl` to `redirect_url` in the initiateConnection call.
+
+```typescript
+// Before:
+const connection = await entity.initiateConnection({
+  appName: app,
+  redirectUrl: redirectUrl || `${process.env.NEXT_PUBLIC_APP_URL}/integrations`,
+});
+
+// After:
+const connection = await entity.initiateConnection({
+  appName: app,
+  redirect_url: redirectUrl || `${process.env.NEXT_PUBLIC_APP_URL}/integrations`,
+});
+```
+
+**Note:** The response still uses `connection.redirectUrl` (camelCase) which is correct.
+
+---
+
+### 7. ✅ Composio Initialization Pattern Verified
 **Location:** `lib/composio.ts:1-6`
 
 **Issue:** Verified that Composio initialization pattern matches SDK requirements.
@@ -151,9 +181,9 @@ After these fixes, please test:
 
 ## Files Modified
 
-1. `components/IntegrationManager.tsx` - Fixed parameter name
-2. `app/api/integrations/connect/route.ts` - Fixed response property
-3. `lib/composio.ts` - Simplified entity creation
+1. `components/IntegrationManager.tsx` - Fixed parameter name (userId → firebaseUid)
+2. `app/api/integrations/connect/route.ts` - Fixed response property (url → connectionUrl)
+3. `lib/composio.ts` - Simplified entity creation + Fixed redirect_url parameter
 4. `app/api/chat/route.ts` - Removed edge runtime
 5. `.env.local.example` - Created new template
 
