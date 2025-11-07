@@ -11,6 +11,9 @@ export async function GET(req: NextRequest) {
 
     const connections = await getUserConnections(userId);
 
+    // Log connections for debugging
+    console.log("Fetched connections:", JSON.stringify(connections, null, 2));
+
     // Define available apps
     const availableApps = [
       "gmail",
@@ -26,12 +29,14 @@ export async function GET(req: NextRequest) {
       name: app,
       connected: connections.some(
         (conn: any) =>
-          conn.appName.toLowerCase() === app.toLowerCase() &&
+          (conn.toolkit?.slug?.toLowerCase() === app.toLowerCase() ||
+           conn.appUniqueId?.toLowerCase().includes(app.toLowerCase())) &&
           conn.status === "ACTIVE"
       ),
       connection: connections.find(
         (conn: any) =>
-          conn.appName.toLowerCase() === app.toLowerCase() &&
+          (conn.toolkit?.slug?.toLowerCase() === app.toLowerCase() ||
+           conn.appUniqueId?.toLowerCase().includes(app.toLowerCase())) &&
           conn.status === "ACTIVE"
       ),
     }));

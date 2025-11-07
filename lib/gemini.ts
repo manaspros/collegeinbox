@@ -12,8 +12,33 @@ export function getGeminiModel(modelName: string = "gemini-2.0-flash-exp") {
   return genAI.getGenerativeModel({ model: modelName });
 }
 
-// Categorize email using Gemini
-export async function categorizeEmail(emailContent: string, subject: string) {
+// Categorize email by course using Gemini
+export async function categorizeEmail(subject: string, from: string, emailContent: string): Promise<string | null> {
+  const model = getGeminiModel();
+
+  const prompt = `Analyze this email and identify the course name. Look for:
+- Course codes (e.g., CS-101, MATH-204, ENG201)
+- Course names (e.g., "Introduction to Computer Science", "Organic Chemistry")
+- Department abbreviations
+
+Return ONLY the course name/code, nothing else. If no course is identifiable, return "null".
+
+From: ${from}
+Subject: ${subject}
+Content: ${emailContent.substring(0, 500)}`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const response = result.response.text().trim();
+    return response === "null" ? null : response;
+  } catch (error) {
+    console.error("Error categorizing email:", error);
+    return null;
+  }
+}
+
+// OLD categorizeEmail function for backward compatibility
+export async function categorizeEmailDetailed(emailContent: string, subject: string) {
   const model = getGeminiModel();
 
   const prompt = `Analyze this email and categorize it. Return ONLY a JSON object with these fields:
@@ -72,20 +97,22 @@ Email: ${emailContent}`;
 }
 
 // Extract deadlines from text
-export async function extractDeadlines(text: string) {
+export async function extractDeadlines(text: string, subject: string) {
   const model = getGeminiModel();
 
-  const prompt = `Extract all deadlines, due dates, and important dates from this text. Return ONLY a JSON array:
+  const prompt = `Extract all deadlines, due dates, and important dates from this email. Return ONLY a JSON array:
 [
   {
     "title": "Assignment title or event name",
-    "date": "YYYY-MM-DD",
-    "time": "HH:MM" or null,
-    "type": "assignment" | "exam" | "event" | "other"
+    "dueAt": "YYYY-MM-DDTHH:mm:ss.000Z" (ISO 8601 format),
+    "type": "assignment" | "exam" | "submission" | "event"
   }
 ]
 
-Text: ${text}`;
+If no deadlines found, return empty array [].
+
+Subject: ${subject}
+Text: ${text.substring(0, 1000)}`;
 
   try {
     const result = await model.generateContent(prompt);
@@ -98,6 +125,44 @@ Text: ${text}`;
   } catch (error) {
     console.error("Error extracting deadlines:", error);
     return [];
+  }
+}
+
+// Detect schedule alerts/changes
+export async function detectAlerts(subject: string, text: string) {
+  const keywords = ["cancelled", "canceled", "rescheduled", "postponed", "urgent", "room change", "location change", "time change"];
+
+  const lowerSubject = subject.toLowerCase();
+  const lowerText = text.toLowerCase();
+
+  const foundKeyword = keywords.find(
+    (kw) => lowerSubject.includes(kw) || lowerText.includes(kw)
+  );
+
+  if (!foundKeyword) return null;
+
+  const model = getGeminiModel();
+  const prompt = `Analyze this email for schedule changes/alerts. Return ONLY a JSON object:
+{
+  "kind": "cancelled" | "rescheduled" | "urgent" | "room_change",
+  "subject": "brief description",
+  "link": null
+}
+
+Subject: ${subject}
+Text: ${text.substring(0, 500)}`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const response = result.response.text();
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    return null;
+  } catch (error) {
+    console.error("Error detecting alert:", error);
+    return null;
   }
 }
 

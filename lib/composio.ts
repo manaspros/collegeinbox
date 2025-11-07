@@ -1,66 +1,47 @@
-import { Composio } from "@composio/core";
+import { Composio } from '@composio/core';
 
-// Initialize Composio client with v3 API
+// Initialize Composio client
 export const composio = new Composio({
   apiKey: process.env.COMPOSIO_API_KEY!,
 });
 
-// Get or create entity for a Firebase user
-// Composio automatically creates entities if they don't exist
-export async function getComposioEntity(firebaseUid: string) {
-  try {
-    const entity = await composio.getEntity(firebaseUid);
-    return entity;
-  } catch (error: any) {
-    console.error("Error getting/creating Composio entity:", error);
-    throw error;
-  }
-}
-
-// Check if user has connected an app
-export async function hasConnection(firebaseUid: string, app: string) {
-  try {
-    const entity = await getComposioEntity(firebaseUid);
-    const connections = await entity.getConnections();
-    return connections.some(
-      (conn: any) => conn.appName.toLowerCase() === app.toLowerCase() && conn.status === "ACTIVE"
-    );
-  } catch (error) {
-    console.error("Error checking connection:", error);
-    return false;
-  }
-}
-
-// Map of app names to their Composio integration names
-const APP_INTEGRATION_MAP: Record<string, string> = {
-  gmail: "GMAIL",
-  googleclassroom: "GOOGLECLASSROOM",
-  googlecalendar: "GOOGLECALENDAR",
-  googledrive: "GOOGLEDRIVE",
-  whatsapp: "WHATSAPP",
-  telegram: "TELEGRAM",
+// Map of app names to their Composio toolkit slugs
+const APP_TOOLKIT_MAP: Record<string, string> = {
+  gmail: "gmail",
+  googleclassroom: "googleclassroom",
+  googlecalendar: "googlecalendar",
+  googledrive: "googledrive",
+  whatsapp: "whatsapp",
+  telegram: "telegram",
 };
 
-// Get connection URL for OAuth using Composio's hosted authentication (v3 API)
+// Get connection URL for OAuth
 export async function getConnectionLink(
   firebaseUid: string,
   app: string,
   redirectUrl?: string
 ) {
   try {
-    // Use Composio v3 link method for hosted authentication
-    // This automatically handles auth configs for common apps
-    const integrationName = APP_INTEGRATION_MAP[app.toLowerCase()] || app.toUpperCase();
+    // Add detailed logging and validation
+    console.log("getConnectionLink called with:", { firebaseUid, app, redirectUrl });
 
-    const connectionRequest = await composio.connectedAccounts.link(
-      firebaseUid,
-      integrationName,
+    if (!app) {
+      throw new Error("App parameter is required but was undefined or null");
+    }
+
+    const toolkitSlug = APP_TOOLKIT_MAP[app.toLowerCase()] || app.toLowerCase();
+
+    // Use toolkit.authorize to initiate connection with entityId
+    const connectionRequest = await composio.toolkits.authorize(
+      firebaseUid, // This is the entityId
+      toolkitSlug,
       {
-        callbackUrl: redirectUrl || `${process.env.NEXT_PUBLIC_APP_URL}/integrations`,
+        redirectUrl: redirectUrl,
       }
     );
 
-    // The response has redirectUrl - this is the OAuth URL
+    console.log("Connection request created:", connectionRequest);
+
     return connectionRequest.redirectUrl;
   } catch (error) {
     console.error("Error generating connection link:", error);
@@ -71,20 +52,44 @@ export async function getConnectionLink(
 // Get list of all user connections
 export async function getUserConnections(firebaseUid: string) {
   try {
-    const entity = await getComposioEntity(firebaseUid);
-    const connections = await entity.getConnections();
-    return connections;
+    console.log("Fetching connections for entityId:", firebaseUid);
+
+    // Use correct parameter: user_ids (array of user IDs)
+    const connections = await composio.connectedAccounts.list({
+      user_ids: [firebaseUid],
+    });
+
+    console.log("Found connections:", connections?.items?.length || 0);
+    console.log("Connections detail:", JSON.stringify(connections.items, null, 2));
+
+    return connections.items || [];
   } catch (error) {
     console.error("Error fetching connections:", error);
     return [];
   }
 }
 
-// Disconnect an app (v3 API)
+// Check if user has connected an app
+export async function hasConnection(firebaseUid: string, app: string) {
+  try {
+    const connections = await getUserConnections(firebaseUid);
+    const toolkitSlug = APP_TOOLKIT_MAP[app.toLowerCase()] || app.toLowerCase();
+
+    return connections.some(
+      (conn: any) =>
+        conn.appUniqueId?.toLowerCase().includes(toolkitSlug) &&
+        conn.status === "ACTIVE"
+    );
+  } catch (error) {
+    console.error("Error checking connection:", error);
+    return false;
+  }
+}
+
+// Disconnect an app
 export async function disconnectApp(firebaseUid: string, connectionId: string) {
   try {
-    // Composio v3 API - delete takes just the connection ID
-    await composio.connectedAccounts.delete(connectionId);
+    await composio.connectedAccounts.delete({ connectedAccountId: connectionId });
     return true;
   } catch (error) {
     console.error("Error disconnecting app:", error);
@@ -99,11 +104,54 @@ export async function executeAction(
   params: any = {}
 ) {
   try {
-    const entity = await getComposioEntity(firebaseUid);
-    const result = await entity.execute(action, params);
+    // Ensure params is always an object
+    const inputParams = params || {};
+
+    console.log(`Executing action: ${action}`, {
+      entityId: firebaseUid,
+      params: inputParams,
+    });
+
+    // According to Composio SDK, we need to use the object format with connectedAccountId
+    // First, get the connected account for this entity and toolkit
+    const connections = await composio.connectedAccounts.list({
+      user_ids: [firebaseUid],
+    });
+
+    // Find the first active Gmail connection
+    const toolkit = action.split('_')[0].toLowerCase(); // e.g., "GMAIL_FETCH_EMAILS" -> "gmail"
+    const connection = connections.items?.find(
+      (conn: any) =>
+        conn.toolkit?.slug === toolkit &&
+        conn.status === 'ACTIVE'
+    );
+
+    if (!connection) {
+      throw new Error(`No active ${toolkit} connection found for entity ${firebaseUid}`);
+    }
+
+    console.log(`Using connection: ${connection.id} for toolkit: ${toolkit}`);
+
+    // Execute with connectedAccountId
+    const result = await composio.tools.execute(action, {
+      connectedAccountId: connection.id,
+      arguments: inputParams,
+      dangerouslySkipVersionCheck: true, // Skip version check for now
+    });
+
+    console.log(`Action ${action} result:`, {
+      successfull: result.successfull,
+      hasData: !!result.data,
+    });
+
     return result;
-  } catch (error) {
-    console.error("Error executing action:", error);
+  } catch (error: any) {
+    console.error(`Error executing action ${action}:`, {
+      message: error.message,
+      code: error.code,
+      possibleFixes: error.possibleFixes,
+      fullError: JSON.stringify(error, null, 2),
+    });
     throw error;
   }
 }
@@ -111,11 +159,21 @@ export async function executeAction(
 // Get tools for AI agent
 export async function getToolsForEntity(firebaseUid: string, apps: string[]) {
   try {
-    const toolset = composio.getToolSet();
-    const tools = await toolset.getTools({
-      apps,
+    // Map app names to toolkit slugs
+    const toolkitSlugs = apps.map(
+      (app) => APP_TOOLKIT_MAP[app.toLowerCase()] || app.toLowerCase()
+    );
+
+    console.log("Fetching tools for apps:", toolkitSlugs);
+
+    const toolset = await composio.getToolsWithApps(toolkitSlugs, {
       entityId: firebaseUid,
     });
+
+    const tools = toolset.tools || [];
+
+    console.log(`Retrieved ${tools.length} tools for user ${firebaseUid}`);
+
     return tools;
   } catch (error) {
     console.error("Error getting tools:", error);

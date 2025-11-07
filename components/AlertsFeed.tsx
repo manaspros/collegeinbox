@@ -23,11 +23,14 @@ import CloseIcon from "@mui/icons-material/Close";
 
 interface AlertItem {
   id: string;
-  kind: "Cancelled" | "Rescheduled" | "Urgent" | "RoomChange";
+  kind: "cancelled" | "rescheduled" | "urgent" | "room_change";
   subject: string;
   date: string;
   link?: string;
   course?: string;
+  emailId?: string;
+  from?: string;
+  createdAt?: any;
 }
 
 export default function AlertsFeed({ userId }: { userId: string }) {
@@ -44,12 +47,24 @@ export default function AlertsFeed({ userId }: { userId: string }) {
   const fetchAlerts = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/alerts?userId=${userId}`);
-      if (!response.ok) throw new Error("Failed to fetch alerts");
-      const data = await response.json();
-      setAlerts(data.alerts || []);
+      const { collection, query, orderBy, getDocs } = await import("firebase/firestore");
+      const { db } = await import("@/lib/firebase");
+
+      const q = query(
+        collection(db, "cache_alerts", userId, "items"),
+        orderBy("createdAt", "desc")
+      );
+
+      const snapshot = await getDocs(q);
+      const alertsList = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as AlertItem[];
+
+      setAlerts(alertsList);
     } catch (err: any) {
       setError(err.message);
+      console.error("Error fetching alerts:", err);
     } finally {
       setLoading(false);
     }
@@ -57,7 +72,10 @@ export default function AlertsFeed({ userId }: { userId: string }) {
 
   const dismissAlert = async (alertId: string) => {
     try {
-      await fetch(`/api/alerts/${alertId}?userId=${userId}`, { method: "DELETE" });
+      const { doc, deleteDoc } = await import("firebase/firestore");
+      const { db } = await import("@/lib/firebase");
+
+      await deleteDoc(doc(db, "cache_alerts", userId, "items", alertId));
       setAlerts(alerts.filter((a) => a.id !== alertId));
     } catch (err) {
       console.error("Error dismissing alert:", err);
@@ -65,14 +83,14 @@ export default function AlertsFeed({ userId }: { userId: string }) {
   };
 
   const getAlertIcon = (kind: string) => {
-    switch (kind) {
-      case "Cancelled":
+    switch (kind.toLowerCase()) {
+      case "cancelled":
         return <EventBusyIcon />;
-      case "Rescheduled":
+      case "rescheduled":
         return <UpdateIcon />;
-      case "RoomChange":
+      case "room_change":
         return <RoomIcon />;
-      case "Urgent":
+      case "urgent":
         return <WarningIcon />;
       default:
         return <NotificationsActiveIcon />;
@@ -80,17 +98,32 @@ export default function AlertsFeed({ userId }: { userId: string }) {
   };
 
   const getAlertColor = (kind: string) => {
-    switch (kind) {
-      case "Cancelled":
+    switch (kind.toLowerCase()) {
+      case "cancelled":
         return "error";
-      case "Urgent":
+      case "urgent":
         return "error";
-      case "Rescheduled":
+      case "rescheduled":
         return "warning";
-      case "RoomChange":
+      case "room_change":
         return "info";
       default:
         return "default";
+    }
+  };
+
+  const formatAlertKind = (kind: string) => {
+    switch (kind) {
+      case "cancelled":
+        return "Cancelled";
+      case "rescheduled":
+        return "Rescheduled";
+      case "room_change":
+        return "Room Change";
+      case "urgent":
+        return "Urgent";
+      default:
+        return kind;
     }
   };
 
@@ -150,19 +183,21 @@ export default function AlertsFeed({ userId }: { userId: string }) {
                     {getAlertIcon(alert.kind)}
                   </Box>
                   <Box sx={{ flex: 1 }}>
-                    <Box sx={{ display: "flex", gap: 1, mb: 1 }}>
+                    <Box sx={{ display: "flex", gap: 1, mb: 1, flexWrap: "wrap" }}>
                       <Chip
-                        label={alert.kind}
+                        label={formatAlertKind(alert.kind)}
                         size="small"
                         color={getAlertColor(alert.kind) as any}
                       />
                       {alert.course && (
                         <Chip label={alert.course} size="small" variant="outlined" />
                       )}
-                      <Chip
-                        label={formatDistanceToNow(new Date(alert.date), { addSuffix: true })}
-                        size="small"
-                      />
+                      {alert.createdAt && (
+                        <Chip
+                          label={formatDistanceToNow(alert.createdAt.toDate ? alert.createdAt.toDate() : new Date(alert.createdAt), { addSuffix: true })}
+                          size="small"
+                        />
+                      )}
                     </Box>
                     <Typography variant="body1" fontWeight="medium">
                       {alert.subject}

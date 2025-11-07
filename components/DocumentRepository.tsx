@@ -34,8 +34,11 @@ interface Document {
   mime: string;
   driveFileId?: string;
   emailId?: string;
-  url: string;
-  createdAt: string;
+  attachmentId?: string;
+  subject?: string;
+  from?: string;
+  size?: number;
+  createdAt: any;
   embeddingId?: string;
 }
 
@@ -56,16 +59,28 @@ export default function DocumentRepository({ userId }: { userId: string }) {
   const fetchDocuments = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/documents?userId=${userId}`);
-      if (!response.ok) throw new Error("Failed to fetch documents");
-      const data = await response.json();
-      setDocuments(data.documents || []);
+      const { collection, query, orderBy, getDocs } = await import("firebase/firestore");
+      const { db } = await import("@/lib/firebase");
+
+      const q = query(
+        collection(db, "cache_documents", userId, "files"),
+        orderBy("createdAt", "desc")
+      );
+
+      const snapshot = await getDocs(q);
+      const documentsList = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Document[];
+
+      setDocuments(documentsList);
 
       // Extract unique courses
-      const uniqueCourses = [...new Set(data.documents.map((doc: Document) => doc.course))];
+      const uniqueCourses = [...new Set(documentsList.map((doc) => doc.course))];
       setCourses(uniqueCourses.filter(Boolean));
     } catch (err: any) {
       setError(err.message);
+      console.error("Error fetching documents:", err);
     } finally {
       setLoading(false);
     }
@@ -76,6 +91,39 @@ export default function DocumentRepository({ userId }: { userId: string }) {
     if (mime.includes("image")) return <ImageIcon color="primary" />;
     if (mime.includes("document") || mime.includes("word")) return <DescriptionIcon color="info" />;
     return <FolderIcon />;
+  };
+
+  const handleDownload = async (doc: Document) => {
+    if (doc.emailId && doc.attachmentId) {
+      // Gmail attachment - need to fetch via API
+      try {
+        const response = await fetch("/api/gmail/download-attachment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId,
+            messageId: doc.emailId,
+            attachmentId: doc.attachmentId,
+            filename: doc.name,
+          }),
+        });
+
+        if (!response.ok) throw new Error("Failed to download attachment");
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = doc.name;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } catch (err: any) {
+        console.error("Download error:", err);
+        alert("Failed to download file");
+      }
+    }
   };
 
   const filteredDocuments = documents.filter((doc) => {
@@ -163,31 +211,29 @@ export default function DocumentRepository({ userId }: { userId: string }) {
                     </Typography>
                     <Box sx={{ display: "flex", gap: 1, mt: 0.5, flexWrap: "wrap" }}>
                       <Chip label={doc.course} size="small" color="primary" variant="outlined" />
-                      <Chip
-                        label={`Added ${formatDistanceToNow(new Date(doc.createdAt), { addSuffix: true })}`}
-                        size="small"
-                      />
+                      {doc.createdAt && (
+                        <Chip
+                          label={`Added ${formatDistanceToNow(doc.createdAt.toDate ? doc.createdAt.toDate() : new Date(doc.createdAt), { addSuffix: true })}`}
+                          size="small"
+                        />
+                      )}
                       {doc.driveFileId && <Chip label="Drive" size="small" />}
                       {doc.emailId && <Chip label="Email" size="small" />}
+                      {doc.subject && (
+                        <Chip
+                          label={doc.subject.substring(0, 30) + (doc.subject.length > 30 ? "..." : "")}
+                          size="small"
+                          variant="outlined"
+                        />
+                      )}
                     </Box>
                   </Box>
                   <Box sx={{ display: "flex", gap: 1, flexShrink: 0 }}>
-                    <Tooltip title="Open in new tab">
-                      <IconButton
-                        size="small"
-                        href={doc.url}
-                        target="_blank"
-                        color="primary"
-                      >
-                        <OpenInNewIcon />
-                      </IconButton>
-                    </Tooltip>
                     <Tooltip title="Download">
                       <IconButton
                         size="small"
-                        href={doc.url}
-                        download
-                        color="secondary"
+                        onClick={() => handleDownload(doc)}
+                        color="primary"
                       >
                         <DownloadIcon />
                       </IconButton>

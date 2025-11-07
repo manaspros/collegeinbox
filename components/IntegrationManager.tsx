@@ -12,6 +12,12 @@ import {
   Box,
   CircularProgress,
   Chip,
+  Snackbar,
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  LinearProgress,
 } from "@mui/material";
 import EmailIcon from "@mui/icons-material/Email";
 import SchoolIcon from "@mui/icons-material/School";
@@ -20,6 +26,8 @@ import FolderIcon from "@mui/icons-material/Folder";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import TelegramIcon from "@mui/icons-material/Telegram";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import SyncIcon from "@mui/icons-material/Sync";
 
 interface Integration {
   name: string;
@@ -77,11 +85,51 @@ export default function IntegrationManager() {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
   const [connectingApp, setConnectingApp] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<string>("");
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({
+    open: false,
+    message: "",
+    severity: "success",
+  });
 
   useEffect(() => {
     if (user) {
       fetchIntegrations();
     }
+  }, [user]);
+
+  // Refresh integrations when page becomes visible (handles OAuth redirect)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && user) {
+        console.log("Page visible, refreshing integrations...");
+        fetchIntegrations();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Also check URL params for OAuth callback
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has("code") || urlParams.has("state")) {
+      console.log("OAuth callback detected, refreshing integrations...");
+      setSnackbar({
+        open: true,
+        message: "Connection successful! Refreshing status...",
+        severity: "success",
+      });
+      // Give Composio a moment to process the connection
+      setTimeout(() => {
+        fetchIntegrations();
+        // Clean up URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }, 2000);
+    }
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [user]);
 
   async function fetchIntegrations() {
@@ -159,6 +207,58 @@ export default function IntegrationManager() {
     }
   }
 
+  async function startSync() {
+    if (!user) return;
+
+    const gmailConnected = integrations.find(i => i.name === "gmail" && i.connected);
+    if (!gmailConnected) {
+      setSnackbar({
+        open: true,
+        message: "Please connect Gmail first to sync your emails",
+        severity: "error",
+      });
+      return;
+    }
+
+    try {
+      setSyncing(true);
+      setSyncProgress("Starting email sync...");
+
+      const res = await fetch("/api/sync/emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.uid }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Sync failed");
+      }
+
+      const result = await res.json();
+      setSyncProgress(`Sync complete! Found ${result.deadlines} deadlines, ${result.documents} documents, ${result.alerts} alerts`);
+
+      setSnackbar({
+        open: true,
+        message: "Data synced successfully! Redirecting to dashboard...",
+        severity: "success",
+      });
+
+      setTimeout(() => {
+        window.location.href = "/dashboard";
+      }, 2000);
+    } catch (error: any) {
+      console.error("Sync error:", error);
+      setSyncProgress(`Error: ${error.message}`);
+      setSnackbar({
+        open: true,
+        message: `Sync failed: ${error.message}`,
+        severity: "error",
+      });
+      setSyncing(false);
+    }
+  }
+
   if (!user) {
     return (
       <Box sx={{ textAlign: "center", py: 4 }}>
@@ -179,13 +279,34 @@ export default function IntegrationManager() {
 
   return (
     <Box>
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h5" gutterBottom>
-          Connect Your Apps
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Connect your Google accounts and messaging apps to enable AI-powered features
-        </Typography>
+      <Box sx={{ mb: 3, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <Box>
+          <Typography variant="h5" gutterBottom>
+            Connect Your Apps
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Connect your Google accounts and messaging apps to enable AI-powered features
+          </Typography>
+        </Box>
+        <Box sx={{ display: "flex", gap: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={fetchIntegrations}
+            disabled={loading}
+          >
+            Refresh
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<SyncIcon />}
+            onClick={startSync}
+            disabled={syncing || integrations.filter(i => i.connected).length === 0}
+          >
+            {syncing ? "Syncing..." : "Sync My Data"}
+          </Button>
+        </Box>
       </Box>
 
       <Grid container spacing={3}>
@@ -283,6 +404,38 @@ export default function IntegrationManager() {
           );
         })}
       </Grid>
+
+      {/* Sync Progress Dialog */}
+      <Dialog open={syncing} maxWidth="sm" fullWidth>
+        <DialogTitle>Syncing Your Data</DialogTitle>
+        <DialogContent>
+          <Box sx={{ py: 2 }}>
+            <Typography variant="body1" gutterBottom>
+              {syncProgress}
+            </Typography>
+            <LinearProgress sx={{ mt: 2 }} />
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: "block" }}>
+              This may take a few moments. We're analyzing your emails, extracting deadlines, and organizing documents...
+            </Typography>
+          </Box>
+        </DialogContent>
+      </Dialog>
+
+      {/* Success/Error Snackbar */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

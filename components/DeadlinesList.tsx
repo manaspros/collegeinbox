@@ -41,12 +41,24 @@ export default function DeadlinesList({ userId }: { userId: string }) {
   const fetchDeadlines = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/deadlines?userId=${userId}`);
-      if (!response.ok) throw new Error("Failed to fetch deadlines");
-      const data = await response.json();
-      setDeadlines(data.deadlines || []);
+      const { collection, query, orderBy, getDocs } = await import("firebase/firestore");
+      const { db } = await import("@/lib/firebase");
+
+      const q = query(
+        collection(db, "cache_deadlines", userId, "items"),
+        orderBy("dueAt", "asc")
+      );
+
+      const snapshot = await getDocs(q);
+      const deadlinesList = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Deadline[];
+
+      setDeadlines(deadlinesList);
     } catch (err: any) {
       setError(err.message);
+      console.error("Error fetching deadlines:", err);
     } finally {
       setLoading(false);
     }
@@ -54,10 +66,27 @@ export default function DeadlinesList({ userId }: { userId: string }) {
 
   const addToCalendar = async (deadline: Deadline) => {
     try {
-      // This will be implemented with Composio Calendar integration
-      alert(`Adding "${deadline.title}" to calendar (feature in progress)`);
+      const response = await fetch("/api/calendar/add-event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: userId,
+          title: deadline.title,
+          start: deadline.dueAt,
+          course: deadline.course,
+          description: `${deadline.type || "Assignment"} for ${deadline.course}`,
+        }),
+      });
+
+      if (response.ok) {
+        alert(`"${deadline.title}" added to your calendar!`);
+      } else {
+        const error = await response.json();
+        alert(`Failed to add to calendar: ${error.error || "Unknown error"}`);
+      }
     } catch (err) {
       console.error("Error adding to calendar:", err);
+      alert("Failed to add to calendar. Please try again.");
     }
   };
 
