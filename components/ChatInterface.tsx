@@ -19,7 +19,7 @@ import SmartToyIcon from "@mui/icons-material/SmartToy";
 import PersonIcon from "@mui/icons-material/Person";
 
 export default function ChatInterface() {
-  const { user } = useFirebaseAuth();
+  const { user, loading } = useFirebaseAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, error } =
@@ -37,6 +37,20 @@ export default function ChatInterface() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  if (loading) {
+    return (
+      <Paper
+        elevation={2}
+        sx={{ p: 4, textAlign: "center", backgroundColor: "#f5f5f5" }}
+      >
+        <CircularProgress size={32} />
+        <Typography variant="h6" color="text.secondary" sx={{ mt: 2 }}>
+          Loading...
+        </Typography>
+      </Paper>
+    );
+  }
 
   if (!user) {
     return (
@@ -222,11 +236,12 @@ export default function ChatInterface() {
           <TextField
             fullWidth
             variant="outlined"
-            placeholder="Ask me anything... (e.g., &apos;Show me deadlines this week&apos;)"
-            value={input || ""}
+            placeholder="Ask me anything... (e.g., 'Show me deadlines this week')"
+            value={input ?? ""}
             onChange={handleInputChange}
-            disabled={isLoading}
+            disabled={isLoading || !user}
             size="small"
+            autoComplete="off"
             sx={{ backgroundColor: "white" }}
           />
           <IconButton

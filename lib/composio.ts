@@ -69,8 +69,10 @@ export async function getUserConnections(firebaseUid: string) {
 // Disconnect an app
 export async function disconnectApp(firebaseUid: string, connectionId: string) {
   try {
-    // Use composio.connectedAccounts.delete() instead of entity.deleteConnection()
-    await composio.connectedAccounts.delete(connectionId);
+    // Composio SDK expects an object with connectedAccountId property
+    await composio.connectedAccounts.delete({
+      connectedAccountId: connectionId
+    });
     return true;
   } catch (error) {
     console.error("Error disconnecting app:", error);
