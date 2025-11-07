@@ -39,10 +39,14 @@ export async function getConnectionLink(
 ) {
   try {
     const entity = await getComposioEntity(firebaseUid);
+
+    // Composio expects redirect_url (with underscore), not redirectUrl
     const connection = await entity.initiateConnection({
       appName: app,
-      redirectUrl: redirectUrl || `${process.env.NEXT_PUBLIC_APP_URL}/integrations`,
+      redirect_url: redirectUrl || `${process.env.NEXT_PUBLIC_APP_URL}/integrations`,
     });
+
+    // The response has redirectUrl (camelCase) - this is the OAuth URL
     return connection.redirectUrl;
   } catch (error) {
     console.error("Error generating connection link:", error);
