@@ -1,7 +1,7 @@
 # Bug Fixes Report - Collegiate Inbox Navigator
 
 ## Summary
-Fixed 8 critical bugs that were preventing proper integration with Composio, breaking the OAuth flow, causing disconnect errors, and causing potential runtime errors.
+Fixed 10 critical bugs that were preventing proper integration with Composio, breaking the OAuth flow, causing disconnect errors, preventing chat input, and causing potential runtime errors.
 
 ---
 
@@ -195,6 +195,71 @@ export async function disconnectApp(firebaseUid: string, connectionId: string) {
 
 ---
 
+### 9. ✅ Incorrect Disconnect Method Parameter Format
+**Location:** `lib/composio.ts:73-75`
+
+**Issue:** The `composio.connectedAccounts.delete()` method was called with a string parameter, but the SDK expects an object with `connectedAccountId` property.
+
+**Impact:** ALL disconnect attempts failed with validation error:
+```
+Error [ComposioError]: Expected object, received string
+```
+
+**Fix:** Changed to pass an object with the proper parameter format.
+
+```typescript
+// Before (WRONG):
+await composio.connectedAccounts.delete(connectionId);
+
+// After (CORRECT):
+await composio.connectedAccounts.delete({
+  connectedAccountId: connectionId
+});
+```
+
+---
+
+### 10. ✅ Chat Input Field Not Working
+**Location:** `components/ChatInterface.tsx:22, 236-246`
+
+**Issue:** Multiple issues preventing users from typing in the chat input field:
+1. No loading state check before rendering chat
+2. Input value could be undefined causing controlled/uncontrolled component issues
+3. Missing user authentication state handling
+
+**Impact:** Users unable to type in chat input field on dashboard.
+
+**Fix:**
+1. Added loading state display with CircularProgress before rendering chat
+2. Changed input value handling from `input || ""` to `input ?? ""` for better null/undefined handling
+3. Added `disabled={isLoading || !user}` to disable input when user not authenticated
+4. Added `autoComplete="off"` to prevent browser interference
+
+```typescript
+// Before:
+const { user } = useFirebaseAuth();
+// ... (no loading check)
+<TextField
+  value={input || ""}
+  onChange={handleInputChange}
+  disabled={isLoading}
+/>
+
+// After:
+const { user, loading } = useFirebaseAuth();
+if (loading) {
+  return <Paper><CircularProgress /></Paper>;
+}
+<TextField
+  value={input ?? ""}
+  onChange={handleInputChange}
+  disabled={isLoading || !user}
+  autoComplete="off"
+/>
+```
+
+---
+
 ## Testing Recommendations
 
 After these fixes, please test:
@@ -211,13 +276,20 @@ After these fixes, please test:
    - Verify successful disconnection without 500 error
    - Verify connection status updates to "Not Connected"
 
-3. **AI Chat with Tools**
+3. **Chat Input Field**
+   - Navigate to `/dashboard`
+   - Verify chat input field is enabled and accepts typing
+   - Try typing a message and ensure text appears
+   - Verify Send button enables when text is entered
+   - Test sending a message
+
+4. **AI Chat with Tools**
    - Navigate to `/dashboard`
    - Send a query like "Show me deadlines this week"
    - Verify tools execute without runtime errors
    - Check for proper streaming responses
 
-4. **Environment Setup**
+5. **Environment Setup**
    - Copy `.env.local.example` to `.env.local`
    - Fill in required API keys
    - Restart dev server
@@ -228,10 +300,11 @@ After these fixes, please test:
 ## Files Modified
 
 1. `components/IntegrationManager.tsx` - Fixed parameter name (userId → firebaseUid)
-2. `app/api/integrations/connect/route.ts` - Fixed response property (url → connectionUrl)
-3. `lib/composio.ts` - Simplified entity creation + Fixed redirect_url parameter + Fixed disconnect method
-4. `app/api/chat/route.ts` - Removed edge runtime
-5. `.env.local.example` - Created new template
+2. `components/ChatInterface.tsx` - Fixed chat input field + Added loading state
+3. `app/api/integrations/connect/route.ts` - Fixed response property (url → connectionUrl)
+4. `lib/composio.ts` - Simplified entity creation + Fixed redirect_url parameter + Fixed disconnect method parameters
+5. `app/api/chat/route.ts` - Removed edge runtime
+6. `.env.local.example` - Created new template
 
 ---
 
