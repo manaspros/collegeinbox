@@ -1,7 +1,7 @@
 # Bug Fixes Report - Collegiate Inbox Navigator
 
 ## Summary
-Fixed 7 critical bugs that were preventing proper integration with Composio, breaking the OAuth flow, and causing potential runtime errors.
+Fixed 8 critical bugs that were preventing proper integration with Composio, breaking the OAuth flow, causing disconnect errors, and causing potential runtime errors.
 
 ---
 
@@ -155,6 +155,46 @@ const connection = await entity.initiateConnection({
 
 ---
 
+### 8. ✅ Incorrect Disconnect Method Name
+**Location:** `lib/composio.ts:70-79`
+
+**Issue:** The disconnect function was calling `entity.deleteConnection(connectionId)` which doesn't exist in Composio SDK v0.5.39.
+
+**Impact:** ALL disconnect attempts failed with 500 error:
+```
+TypeError: entity.deleteConnection is not a function
+```
+
+**Fix:** Changed from `entity.deleteConnection()` to `composio.connectedAccounts.delete()`.
+
+```typescript
+// Before (WRONG):
+export async function disconnectApp(firebaseUid: string, connectionId: string) {
+  try {
+    const entity = await getComposioEntity(firebaseUid);
+    await entity.deleteConnection(connectionId);
+    return true;
+  } catch (error) {
+    console.error("Error disconnecting app:", error);
+    return false;
+  }
+}
+
+// After (CORRECT):
+export async function disconnectApp(firebaseUid: string, connectionId: string) {
+  try {
+    // Use composio.connectedAccounts.delete() instead of entity.deleteConnection()
+    await composio.connectedAccounts.delete(connectionId);
+    return true;
+  } catch (error) {
+    console.error("Error disconnecting app:", error);
+    return false;
+  }
+}
+```
+
+---
+
 ## Testing Recommendations
 
 After these fixes, please test:
@@ -165,13 +205,19 @@ After these fixes, please test:
    - Verify redirect to Composio OAuth page
    - Verify successful return and connection status update
 
-2. **AI Chat with Tools**
+2. **Disconnect Flow**
+   - Navigate to `/integrations`
+   - Click "Disconnect" on a connected integration
+   - Verify successful disconnection without 500 error
+   - Verify connection status updates to "Not Connected"
+
+3. **AI Chat with Tools**
    - Navigate to `/dashboard`
    - Send a query like "Show me deadlines this week"
    - Verify tools execute without runtime errors
    - Check for proper streaming responses
 
-3. **Environment Setup**
+4. **Environment Setup**
    - Copy `.env.local.example` to `.env.local`
    - Fill in required API keys
    - Restart dev server
@@ -183,7 +229,7 @@ After these fixes, please test:
 
 1. `components/IntegrationManager.tsx` - Fixed parameter name (userId → firebaseUid)
 2. `app/api/integrations/connect/route.ts` - Fixed response property (url → connectionUrl)
-3. `lib/composio.ts` - Simplified entity creation + Fixed redirect_url parameter
+3. `lib/composio.ts` - Simplified entity creation + Fixed redirect_url parameter + Fixed disconnect method
 4. `app/api/chat/route.ts` - Removed edge runtime
 5. `.env.local.example` - Created new template
 
