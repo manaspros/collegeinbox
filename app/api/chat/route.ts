@@ -3,8 +3,6 @@ import { streamText } from "ai";
 import { google } from "@ai-sdk/google";
 import { getToolsForEntity } from "@/lib/composio";
 
-export const runtime = "edge";
-
 export async function POST(req: NextRequest) {
   try {
     const { messages, userId } = await req.json();

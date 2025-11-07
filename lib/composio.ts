@@ -6,12 +6,13 @@ export const composio = new Composio({
 });
 
 // Get or create entity for a Firebase user
+// Composio automatically creates entities if they don't exist
 export async function getComposioEntity(firebaseUid: string) {
   try {
     const entity = await composio.getEntity(firebaseUid);
     return entity;
-  } catch (error) {
-    console.error("Error getting Composio entity:", error);
+  } catch (error: any) {
+    console.error("Error getting/creating Composio entity:", error);
     throw error;
   }
 }

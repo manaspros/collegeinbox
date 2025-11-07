@@ -115,7 +115,7 @@ export default function IntegrationManager() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: user.uid,
+          firebaseUid: user.uid,
           app: appName,
           redirectUrl: `${window.location.origin}/integrations`,
         }),
