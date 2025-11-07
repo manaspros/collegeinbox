@@ -1,6 +1,6 @@
-import { Composio } from "composio-core";
+import { Composio } from "@composio/core";
 
-// Initialize Composio client
+// Initialize Composio client with v3 API
 export const composio = new Composio({
   apiKey: process.env.COMPOSIO_API_KEY!,
 });
@@ -41,22 +41,24 @@ const APP_INTEGRATION_MAP: Record<string, string> = {
   telegram: "TELEGRAM",
 };
 
-// Get connection URL for OAuth using Composio's hosted authentication
+// Get connection URL for OAuth using Composio's hosted authentication (v3 API)
 export async function getConnectionLink(
   firebaseUid: string,
   app: string,
   redirectUrl?: string
 ) {
   try {
-    // Use Composio's hosted authentication flow (link method)
+    // Use Composio v3 link method for hosted authentication
     // This automatically handles auth configs for common apps
     const integrationName = APP_INTEGRATION_MAP[app.toLowerCase()] || app.toUpperCase();
 
-    const connectionRequest = await composio.connectedAccounts.initiate({
-      userId: firebaseUid,
-      integrationId: integrationName,
-      redirectUrl: redirectUrl || `${process.env.NEXT_PUBLIC_APP_URL}/integrations`,
-    });
+    const connectionRequest = await composio.connectedAccounts.link(
+      firebaseUid,
+      integrationName,
+      {
+        callbackUrl: redirectUrl || `${process.env.NEXT_PUBLIC_APP_URL}/integrations`,
+      }
+    );
 
     // The response has redirectUrl - this is the OAuth URL
     return connectionRequest.redirectUrl;
@@ -78,13 +80,11 @@ export async function getUserConnections(firebaseUid: string) {
   }
 }
 
-// Disconnect an app
+// Disconnect an app (v3 API)
 export async function disconnectApp(firebaseUid: string, connectionId: string) {
   try {
-    // Composio SDK expects an object with connectedAccountId property
-    await composio.connectedAccounts.delete({
-      connectedAccountId: connectionId
-    });
+    // Composio v3 API - delete takes just the connection ID
+    await composio.connectedAccounts.delete(connectionId);
     return true;
   } catch (error) {
     console.error("Error disconnecting app:", error);

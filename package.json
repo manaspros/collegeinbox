@@ -11,6 +11,7 @@
   "dependencies": {
     "@ai-sdk/google": "^2.0.29",
     "@ai-sdk/react": "^2.0.89",
+    "@composio/core": "^0.2.3",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@google/generative-ai": "^0.24.1",
@@ -20,7 +21,6 @@
     "ai": "^5.0.89",
     "annyang": "^2.6.1",
     "clsx": "^2.1.1",
-    "composio-core": "^0.5.39",
     "date-fns": "^4.1.0",
     "firebase": "^12.5.0",
     "next": "16.0.1",
