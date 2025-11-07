@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
       redirectUrl || undefined
     );
 
-    return NextResponse.json({ url: connectionUrl });
+    return NextResponse.json({ connectionUrl });
   } catch (error: any) {
     console.error("Error in connect route:", error);
     return NextResponse.json(
