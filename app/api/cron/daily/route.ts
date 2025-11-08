@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getComposioEntity } from "@/lib/composio";
+// import { getComposioEntity } from "@/lib/composio"; // DEPRECATED - function doesn't exist
 import { collection, getDocs, addDoc, deleteDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { getGeminiModel } from "@/lib/gemini";
