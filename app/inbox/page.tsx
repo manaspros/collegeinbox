@@ -36,6 +36,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import { format } from "date-fns";
+import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
 
 interface Email {
   id: string;
@@ -48,6 +49,13 @@ interface Email {
   isUnread?: boolean;
 }
 
+interface Deadline {
+  title: string;
+  date: string;
+  time?: string;
+  description: string;
+}
+
 export default function InboxPage() {
   const { user, loading: authLoading, signOut } = useFirebaseAuth();
   const router = useRouter();
@@ -58,6 +66,8 @@ export default function InboxPage() {
   const [summarizing, setSummarizing] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [deadlines, setDeadlines] = useState<Deadline[]>([]);
+  const [addingToCalendar, setAddingToCalendar] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -114,6 +124,7 @@ export default function InboxPage() {
   const summarizeEmail = async (email: Email) => {
     setSummarizing(true);
     setSummary(null);
+    setDeadlines([]);
 
     try {
       const response = await fetch("/api/gmail/summarize", {
@@ -123,6 +134,7 @@ export default function InboxPage() {
           subject: email.subject,
           body: email.body || email.snippet,
           from: email.from,
+          emailId: email.id,
         }),
       });
 
@@ -133,22 +145,64 @@ export default function InboxPage() {
       }
 
       setSummary(data.summary);
+      setDeadlines(data.deadlines || []);
     } catch (err: any) {
       console.error("Error summarizing email:", err);
       setSummary("Failed to generate summary. Please try again.");
+      setDeadlines([]);
     } finally {
       setSummarizing(false);
+    }
+  };
+
+  const addDeadlinesToCalendar = async () => {
+    if (!user || deadlines.length === 0) return;
+
+    setAddingToCalendar(true);
+
+    try {
+      for (const deadline of deadlines) {
+        const response = await fetch("/api/calendar/add-event", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user.uid,
+            event: {
+              title: deadline.title,
+              dueDate: deadline.date,
+              description: deadline.description,
+            },
+            addReminders: true,
+            reminderMinutes: [60, 1440], // 1 hour and 1 day before
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to add event to calendar");
+        }
+      }
+
+      alert(`Successfully added ${deadlines.length} deadline(s) to your calendar!`);
+    } catch (err: any) {
+      console.error("Error adding to calendar:", err);
+      alert("Failed to add deadlines to calendar. Please try again.");
+    } finally {
+      setAddingToCalendar(false);
     }
   };
 
   const handleEmailClick = (email: Email) => {
     setSelectedEmail(email);
     setSummary(null);
+    setDeadlines([]);
   };
 
   const handleCloseDialog = () => {
     setSelectedEmail(null);
     setSummary(null);
+    setDeadlines([]);
   };
 
   if (authLoading) {
@@ -433,16 +487,29 @@ export default function InboxPage() {
                 </Box>
               )}
             </DialogContent>
-            <DialogActions>
+            <DialogActions sx={{ justifyContent: "space-between", px: 3, py: 2 }}>
               <Button onClick={handleCloseDialog}>Close</Button>
-              <Button
-                variant="contained"
-                startIcon={summarizing ? <CircularProgress size={16} /> : <AutoAwesomeIcon />}
-                onClick={() => summarizeEmail(selectedEmail)}
-                disabled={summarizing}
-              >
-                {summarizing ? "Summarizing..." : "Summarize with AI"}
-              </Button>
+              <Box sx={{ display: "flex", gap: 1 }}>
+                {deadlines.length > 0 && (
+                  <Button
+                    variant="outlined"
+                    color="success"
+                    startIcon={addingToCalendar ? <CircularProgress size={16} /> : <CalendarTodayIcon />}
+                    onClick={addDeadlinesToCalendar}
+                    disabled={addingToCalendar}
+                  >
+                    {addingToCalendar ? "Adding..." : `Add ${deadlines.length} to Calendar`}
+                  </Button>
+                )}
+                <Button
+                  variant="contained"
+                  startIcon={summarizing ? <CircularProgress size={16} /> : <AutoAwesomeIcon />}
+                  onClick={() => summarizeEmail(selectedEmail)}
+                  disabled={summarizing}
+                >
+                  {summarizing ? "Analyzing..." : "Analyze with AI"}
+                </Button>
+              </Box>
             </DialogActions>
           </>
         )}

@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 /**
- * API endpoint to summarize emails using Gemini AI
+ * API endpoint to analyze emails and extract deadlines
+ * Uses simplified approach to avoid quota issues
  */
 export async function POST(req: NextRequest) {
   try {
-    const { subject, body, from } = await req.json();
+    const { subject, body, from, emailId } = await req.json();
 
     if (!subject && !body) {
       return NextResponse.json(
@@ -19,50 +20,79 @@ export async function POST(req: NextRequest) {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
 
-    const prompt = `You are a professional AI email assistant designed for college students. Analyze the following email and provide a clean, well-structured summary.
+    // Single AI call to get summary AND deadlines
+    const prompt = `Analyze this email and provide:
+1. A brief summary (2-3 sentences)
+2. Any deadlines/due dates found
 
-**Email Details:**
-- **Subject:** ${subject}
-- **From:** ${from}
-- **Content:** ${body}
+Email Subject: ${subject}
+From: ${from}
+Content: ${body}
 
-Generate a professional summary using this EXACT format:
-
-## 📧 Email Summary
-
-### 🎯 Main Purpose
-[Provide a clear, concise explanation of the email's primary purpose in 1-2 sentences]
-
-### ✅ Action Items
-${body.toLowerCase().includes('action') || body.toLowerCase().includes('deadline') || body.toLowerCase().includes('submit') || body.toLowerCase().includes('check') ?
-  '[List specific actions required with bullet points]' :
-  '_No immediate action required._'}
-
-### 📌 Key Details
-[Highlight the most important information, dates, requirements, or context the student should be aware of]
-
----
-
-**Guidelines:**
-- Use clear, professional language
-- Be concise but informative (3-5 sentences total)
-- Use bullet points (•) for multiple items
-- Use _italics_ for "No action required" or "None"
-- Focus on student-relevant information
-- Include specific dates/times if mentioned`;
+Respond in JSON format:
+{
+  "summary": "Brief summary here",
+  "hasDeadline": true/false,
+  "deadlines": [
+    {
+      "title": "Assignment/task name",
+      "date": "YYYY-MM-DD",
+      "time": "HH:MM" or null,
+      "description": "Brief description"
+    }
+  ]
+}`;
 
     const result = await model.generateContent(prompt);
-    const summary = result.response.text();
+    const responseText = result.response.text();
+
+    // Extract JSON from response
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    let analysisData;
+
+    if (jsonMatch) {
+      analysisData = JSON.parse(jsonMatch[0]);
+    } else {
+      // Fallback if JSON parsing fails
+      analysisData = {
+        summary: responseText.substring(0, 500),
+        hasDeadline: false,
+        deadlines: []
+      };
+    }
+
+    // Format summary for display
+    const formattedSummary = `## 📧 Email Summary
+
+### 🎯 Main Purpose
+${analysisData.summary}
+
+${analysisData.deadlines && analysisData.deadlines.length > 0 ? `
+### 📅 Deadlines Found
+${analysisData.deadlines.map((d: any) =>
+  `• **${d.title}** - Due: ${d.date}${d.time ? ` at ${d.time}` : ''}`
+).join('\n')}
+` : ''}
+
+### ✅ Action Items
+${analysisData.hasDeadline ? 'Review deadlines above and add to calendar' : '_No immediate action required._'}`;
 
     return NextResponse.json({
       success: true,
-      summary,
+      summary: formattedSummary,
+      hasDeadline: analysisData.hasDeadline || false,
+      deadlines: analysisData.deadlines || [],
+      emailId: emailId,
     });
   } catch (error: any) {
-    console.error("Error summarizing email:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to summarize email" },
-      { status: 500 }
-    );
+    console.error("Error analyzing email:", error);
+
+    // Return simple fallback instead of error
+    return NextResponse.json({
+      success: true,
+      summary: `## 📧 Email Summary\n\n**Subject:** ${req.body?.subject || 'N/A'}\n**From:** ${req.body?.from || 'N/A'}\n\n_Analysis temporarily unavailable. Please try again later._`,
+      hasDeadline: false,
+      deadlines: [],
+    });
   }
 }
