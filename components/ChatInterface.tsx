@@ -1,6 +1,5 @@
 "use client";
 
-// @ts-ignore - AI SDK import
 import { useChat } from "@ai-sdk/react";
 import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 import { useState, useRef, useEffect } from "react";
@@ -12,17 +11,39 @@ import {
   Typography,
   CircularProgress,
   IconButton,
+  Alert,
+  Chip,
 } from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
 import MicIcon from "@mui/icons-material/Mic";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import PersonIcon from "@mui/icons-material/Person";
+import StorageIcon from "@mui/icons-material/Storage";
 
 export default function ChatInterface() {
   const { user } = useFirebaseAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [ragStatus, setRagStatus] = useState<{ deadlines: number; documents: number; alerts: number } | null>(null);
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, error, setInput } =
+  // Fetch RAG data status
+  useEffect(() => {
+    if (user) {
+      fetch(`/api/dashboard/data?userId=${user.uid}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setRagStatus({
+              deadlines: data.data.deadlines?.length || 0,
+              documents: data.data.documents?.length || 0,
+              alerts: data.data.scheduleChanges?.length || 0,
+            });
+          }
+        })
+        .catch(err => console.error('Failed to fetch RAG status:', err));
+    }
+  }, [user]);
+
+  const { messages, input, handleInputChange, handleSubmit, isLoading, error } =
     useChat({
       api: "/api/chat",
       body: {
@@ -32,15 +53,6 @@ export default function ChatInterface() {
         console.error("Chat error:", error);
       },
     });
-
-  // Explicit input change handler
-  const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (handleInputChange) {
-      handleInputChange(e);
-    } else if (setInput) {
-      setInput(e.target.value);
-    }
-  };
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -71,12 +83,33 @@ export default function ChatInterface() {
           color: "white",
         }}
       >
-        <Typography variant="h6" sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <SmartToyIcon /> AI Academic Assistant
-        </Typography>
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
+          <Typography variant="h6" sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <SmartToyIcon /> AI Academic Assistant
+          </Typography>
+          {ragStatus && (
+            <Box sx={{ display: "flex", gap: 0.5 }}>
+              <Chip
+                size="small"
+                label={`${ragStatus.deadlines} deadlines`}
+                sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', fontSize: '0.7rem' }}
+              />
+              <Chip
+                size="small"
+                label={`${ragStatus.documents} docs`}
+                sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', fontSize: '0.7rem' }}
+              />
+            </Box>
+          )}
+        </Box>
         <Typography variant="caption">
           Ask me about deadlines, assignments, emails, and more!
         </Typography>
+        {ragStatus && (ragStatus.deadlines === 0 && ragStatus.documents === 0) && (
+          <Typography variant="caption" sx={{ display: 'block', mt: 0.5, opacity: 0.9 }}>
+            ℹ️ Sync your emails first to enable smart answers
+          </Typography>
+        )}
       </Box>
 
       {/* Messages Area */}

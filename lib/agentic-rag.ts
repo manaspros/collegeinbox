@@ -286,10 +286,18 @@ export async function processEmail(
   userId: string,
   emailData: any
 ): Promise<void> {
-  console.log(`\n[Pipeline] Processing email: ${emailData.id}`);
-
   try {
-    const emailId = emailData.id;
+    // Extract email ID - handle different formats from Gmail API
+    const emailId = emailData.id || emailData.messageId || emailData.threadId || `email_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Validate emailId
+    if (!emailId || typeof emailId !== 'string' || emailId.trim() === '') {
+      console.error('[Pipeline] Invalid email ID:', emailData);
+      throw new Error('Email ID is required and must be a non-empty string');
+    }
+
+    console.log(`\n[Pipeline] Processing email: ${emailId}`);
+
     const subject = emailData.subject || "";
     const body = emailData.body || emailData.snippet || "";
     const from = emailData.from || "";
@@ -366,6 +374,11 @@ export async function batchProcessEmails(
 ): Promise<{ success: number; failed: number }> {
   console.log(`\n[Batch Pipeline] Processing ${emails.length} emails`);
 
+  // Log structure of first email for debugging
+  if (emails.length > 0) {
+    console.log('[Batch Pipeline] Sample email structure:', JSON.stringify(emails[0], null, 2).substring(0, 500));
+  }
+
   let success = 0;
   let failed = 0;
 
@@ -374,7 +387,8 @@ export async function batchProcessEmails(
       await processEmail(userId, email);
       success++;
     } catch (error) {
-      console.error(`[Batch Pipeline] Failed to process email ${email.id}:`, error);
+      console.error(`[Batch Pipeline] Failed to process email:`, error);
+      console.error(`[Batch Pipeline] Email data:`, email);
       failed++;
     }
   }

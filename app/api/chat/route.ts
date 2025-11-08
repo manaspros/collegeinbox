@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { streamText } from "ai";
 import { google } from "@ai-sdk/google";
-import { getToolsForEntity, executeAction, getConnectedAccountId } from "@/lib/composio";
+import { getToolsForEntity } from "@/lib/composio";
+import { getDeadlines, getAlerts, getDocuments, searchEmails } from "@/lib/agentic-rag";
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,34 +20,59 @@ export async function POST(req: NextRequest) {
       "googledrive",
     ]);
 
-    // RAG: Fetch recent emails for context
-    let emailContext = "";
+    // RAG: Fetch cached data from Firestore (instant, no API calls!)
+    let ragContext = "";
     try {
-      const gmailAccountId = await getConnectedAccountId(userId, "gmail");
-      if (gmailAccountId) {
-        console.log("Fetching emails for RAG context...");
-        const emailsResult = await executeAction(
-          userId,
-          "GMAIL_FETCH_EMAILS",
-          {
-            query: "newer_than:30d",
-            max_results: 50,
-          },
-          gmailAccountId
-        );
+      console.log("Fetching RAG context from Firestore...");
 
-        const emails = emailsResult.data?.messages || emailsResult.messages || [];
-        if (emails.length > 0) {
-          emailContext = `\n\n**RECENT EMAIL CONTEXT (Last 30 days):**\n`;
-          emailContext += emails.slice(0, 30).map((email: any, idx: number) => {
-            return `Email ${idx + 1}: ${email.subject || "(No Subject)"} | From: ${email.from || "Unknown"} | ${email.snippet || ""}`;
-          }).join("\n");
-          console.log(`Added ${emails.length} emails to RAG context`);
+      // Get cached deadlines, alerts, and documents
+      const [deadlines, alerts, documents] = await Promise.all([
+        getDeadlines(userId),
+        getAlerts(userId),
+        getDocuments(userId),
+      ]);
+
+      // Build structured context
+      if (deadlines.length > 0 || alerts.length > 0 || documents.length > 0) {
+        ragContext = `\n\n**CACHED DATA (from your emails):**\n`;
+
+        // Add upcoming deadlines
+        if (deadlines.length > 0) {
+          ragContext += `\n**UPCOMING DEADLINES (${deadlines.length} total):**\n`;
+          deadlines.slice(0, 10).forEach((d: any) => {
+            ragContext += `- ${d.title} (${d.course}) - Due: ${d.dueDate} [Priority: ${d.priority}]\n`;
+          });
         }
+
+        // Add recent alerts
+        if (alerts.length > 0) {
+          ragContext += `\n**RECENT ALERTS (${alerts.length} total):**\n`;
+          alerts.slice(0, 5).forEach((a: any) => {
+            ragContext += `- ${a.message} (${a.course}) - ${a.type}\n`;
+          });
+        }
+
+        // Add documents
+        if (documents.length > 0) {
+          ragContext += `\n**DOCUMENTS (${documents.length} total):**\n`;
+          const docsByCourse = documents.reduce((acc: any, doc: any) => {
+            if (!acc[doc.course]) acc[doc.course] = [];
+            acc[doc.course].push(doc);
+            return acc;
+          }, {});
+          Object.entries(docsByCourse).slice(0, 5).forEach(([course, docs]: [string, any]) => {
+            ragContext += `- ${course}: ${docs.length} files (${docs.map((d: any) => d.filename).slice(0, 3).join(", ")})\n`;
+          });
+        }
+
+        console.log(`Added RAG context: ${deadlines.length} deadlines, ${alerts.length} alerts, ${documents.length} documents`);
+      } else {
+        ragContext = `\n\n**NOTE:** No cached email data found. User should sync emails first using the sync button.`;
+        console.log("No RAG data available - user needs to sync emails");
       }
     } catch (error) {
-      console.error("Failed to fetch email context:", error);
-      // Continue without email context
+      console.error("Failed to fetch RAG context:", error);
+      ragContext = `\n\n**NOTE:** Could not load cached data. Some features may be limited.`;
     }
 
     // System prompt to guide the AI (enhanced with RAG)
@@ -65,10 +91,10 @@ Your role is to help students:
 5. Summarize long emails and course updates
 
 When a user asks about deadlines, assignments, emails, or schedule:
-- FIRST check the email context below for relevant information
-- Then use Composio tools if you need more specific/real-time data
+- FIRST check the CACHED DATA below - this is extracted from the student's emails
+- The cached data includes deadlines, alerts, and documents already processed
+- Only use Composio tools if you need fresh/real-time data not in the cache
 - Provide accurate, specific information with dates and details
-- Mention email subjects, senders, and dates when relevant
 - Suggest relevant actions (e.g., "Would you like me to add this to your calendar?")
 - Be concise but helpful
 
@@ -78,12 +104,12 @@ Examples of queries you should handle:
 - "What assignments are due this weekend?"
 - "Search for unread emails from professors"
 - "When is my next exam?"
-- "Summarize my recent emails"
-- "What did Professor Smith say about the exam?"
+- "What schedule changes do I have?"
+- "Show me documents from my Database course"
 
-${emailContext}
+${ragContext}
 
-Always prioritize accuracy. Use the email context above for quick answers, and use tools for detailed queries.`;
+**IMPORTANT:** If the cached data shows no information, politely inform the user they need to sync their emails first (there's a sync button in the dashboard). Otherwise, use the cached data above for instant answers.`;
 
     const result = await streamText({
       model: google("gemini-2.0-flash-exp"),
