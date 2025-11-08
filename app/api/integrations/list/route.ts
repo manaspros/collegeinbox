@@ -25,9 +25,14 @@ export async function GET(req: NextRequest) {
     // Map connections to integration status
     const integrations = availableApps.map((app) => {
       const connection = connections.find(
-        (conn: any) =>
-          conn.toolkitSlug?.toLowerCase() === app.toLowerCase() &&
-          conn.status === "ACTIVE"
+        (conn: any) => {
+          // Check both toolkitSlug and toolkit.slug for compatibility
+          const toolkitSlug = conn.toolkitSlug || conn.toolkit?.slug;
+          return (
+            toolkitSlug?.toLowerCase() === app.toLowerCase() &&
+            conn.status === "ACTIVE"
+          );
+        }
       );
 
       return {

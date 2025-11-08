@@ -12,11 +12,13 @@ export async function hasConnection(firebaseUid: string, app: string) {
       userIds: [firebaseUid],
     });
 
-    return connections.items.some(
-      (conn: any) =>
-        conn.toolkitSlug?.toLowerCase() === app.toLowerCase() &&
+    return connections.items.some((conn: any) => {
+      const toolkitSlug = conn.toolkitSlug || conn.toolkit?.slug;
+      return (
+        toolkitSlug?.toLowerCase() === app.toLowerCase() &&
         conn.status === "ACTIVE"
-    );
+      );
+    });
   } catch (error) {
     console.error("Error checking connection:", error);
     return false;
@@ -37,24 +39,32 @@ export async function getConnectionLink(
     const allAuthConfigs = await composio.authConfigs.list({});
     console.log(`Total auth configs available: ${allAuthConfigs.items?.length || 0}`);
 
-    // Filter for the specific toolkit
-    const toolkitConfigs = allAuthConfigs.items?.filter(
-      (config: any) => config.toolkitSlug?.toLowerCase() === app.toLowerCase()
-    ) || [];
+    // Log first auth config to see structure
+    if (allAuthConfigs.items && allAuthConfigs.items.length > 0) {
+      console.log("Sample auth config structure:", JSON.stringify(allAuthConfigs.items[0], null, 2));
+    }
+
+    // Filter for the specific toolkit (check multiple possible field names)
+    const toolkitConfigs = allAuthConfigs.items?.filter((config: any) => {
+      const toolkitSlug = config.toolkitSlug || config.toolkit?.slug || config.toolkit;
+      return toolkitSlug?.toLowerCase() === app.toLowerCase();
+    }) || [];
 
     console.log(`Found ${toolkitConfigs.length} auth configs for ${app}`);
     console.log(`Matching configs:`, toolkitConfigs.map((c: any) => ({
       id: c.id,
-      toolkit: c.toolkitSlug,
+      toolkit: c.toolkitSlug || c.toolkit?.slug || c.toolkit,
       isComposioManaged: c.isComposioManaged,
       status: c.status
     })));
 
     if (toolkitConfigs.length === 0) {
-      const availableToolkits = [...new Set(allAuthConfigs.items?.map((c: any) => c.toolkitSlug))];
+      const availableToolkits = [...new Set(allAuthConfigs.items?.map((c: any) =>
+        c.toolkitSlug || c.toolkit?.slug || c.toolkit || 'unknown'
+      ))];
       throw new Error(
         `No auth config found for toolkit: ${app}.\n` +
-        `Available toolkits: ${availableToolkits.join(", ")}\n` +
+        `Available toolkits: ${availableToolkits.filter(t => t !== 'unknown').join(", ")}\n` +
         `Create one at: https://app.composio.dev/settings/auth-configs`
       );
     }
@@ -196,12 +206,15 @@ export async function getConnectedAccountId(
       userIds: [firebaseUid],
     });
 
-    const activeConnection = connections.items?.find(
-      (conn: any) =>
-        conn.toolkitSlug?.toLowerCase() === toolkitSlug.toLowerCase() &&
+    const activeConnection = connections.items?.find((conn: any) => {
+      const slug = conn.toolkitSlug || conn.toolkit?.slug;
+      return (
+        slug?.toLowerCase() === toolkitSlug.toLowerCase() &&
         conn.status === "ACTIVE"
-    );
+      );
+    });
 
+    console.log(`Found connection for ${toolkitSlug}:`, activeConnection?.id || null);
     return activeConnection?.id || null;
   } catch (error) {
     console.error("Error getting connected account ID:", error);
