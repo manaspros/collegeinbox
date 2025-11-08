@@ -17,7 +17,6 @@ import EmailIcon from "@mui/icons-material/Email";
 import SchoolIcon from "@mui/icons-material/School";
 import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
 import FolderIcon from "@mui/icons-material/Folder";
-import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import TelegramIcon from "@mui/icons-material/Telegram";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 
@@ -57,13 +56,6 @@ const integrationInfo = [
     color: "#FBBC04",
   },
   {
-    name: "whatsapp",
-    label: "WhatsApp",
-    icon: WhatsAppIcon,
-    description: "Receive deadline reminders via WhatsApp",
-    color: "#25D366",
-  },
-  {
     name: "telegram",
     label: "Telegram",
     icon: TelegramIcon,
@@ -98,6 +90,7 @@ export default function IntegrationManager() {
       }
 
       const data = await res.json();
+      console.log("Received integrations data:", data);
       setIntegrations(data.integrations || []);
     } catch (error) {
       console.error("Error fetching integrations:", error);
@@ -246,10 +239,17 @@ export default function IntegrationManager() {
                       fullWidth
                       variant="outlined"
                       color="error"
-                      onClick={() =>
-                        disconnectIntegration(info.name, integration.connection?.id)
-                      }
-                      disabled={isConnecting}
+                      onClick={() => {
+                        const connId = integration?.connection?.id ||
+                                      integration?.connection?.connectionId ||
+                                      integration?.connection?.connectedAccountId;
+                        if (connId) {
+                          disconnectIntegration(info.name, connId);
+                        } else {
+                          console.error("No connection ID found for:", info.name, integration);
+                        }
+                      }}
+                      disabled={isConnecting || !integration?.connection}
                     >
                       Disconnect
                     </Button>

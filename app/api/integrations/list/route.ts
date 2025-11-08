@@ -17,9 +17,10 @@ export async function GET(req: NextRequest) {
       "googleclassroom",
       "googlecalendar",
       "googledrive",
-      "whatsapp",
       "telegram",
     ];
+
+    console.log("Fetched connections:", JSON.stringify(connections, null, 2));
 
     // Map connections to integration status
     const integrations = availableApps.map((app) => ({
@@ -33,8 +34,16 @@ export async function GET(req: NextRequest) {
         (conn: any) =>
           conn.toolkitSlug?.toLowerCase() === app.toLowerCase() &&
           conn.status === "ACTIVE"
-      ),
-    }));
+      );
+
+      return {
+        name: app,
+        connected: !!connection,
+        connection: connection,
+      };
+    });
+
+    console.log("Mapped integrations:", integrations);
 
     return NextResponse.json({ integrations });
   } catch (error: any) {
