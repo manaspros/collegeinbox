@@ -4,6 +4,7 @@ import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 import { useRouter } from "next/navigation";
 import { Box, Container, Typography, Grid, AppBar, Toolbar, Button, IconButton } from "@mui/material";
 import ChatInterface from "@/components/ChatInterface";
+import CriticalPathDashboard from "@/components/CriticalPathDashboard";
 import LogoutIcon from "@mui/icons-material/Logout";
 import SettingsIcon from "@mui/icons-material/Settings";
 import Link from "next/link";
@@ -52,6 +53,11 @@ export default function Dashboard() {
         </Typography>
 
         <Grid container spacing={3}>
+          {/* Critical Path Dashboard */}
+          <Grid item xs={12}>
+            <CriticalPathDashboard />
+          </Grid>
+
           {/* AI Chat Interface */}
           <Grid item xs={12} lg={8}>
             <ChatInterface />
