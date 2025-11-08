@@ -23,12 +23,16 @@ export async function GET(req: NextRequest) {
     console.log("Fetched connections:", JSON.stringify(connections, null, 2));
 
     // Map connections to integration status
-    // Composio v3 uses toolkitSlug instead of appName
-    const integrations = availableApps.map((app) => {
-      const connection = connections.find(
+    const integrations = availableApps.map((app) => ({
+      name: app,
+      connected: connections.some(
         (conn: any) =>
-          (conn.toolkitSlug?.toLowerCase() === app.toLowerCase() ||
-           conn.appName?.toLowerCase() === app.toLowerCase()) &&
+          conn.toolkitSlug?.toLowerCase() === app.toLowerCase() &&
+          conn.status === "ACTIVE"
+      ),
+      connection: connections.find(
+        (conn: any) =>
+          conn.toolkitSlug?.toLowerCase() === app.toLowerCase() &&
           conn.status === "ACTIVE"
       );
 
