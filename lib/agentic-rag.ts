@@ -1,5 +1,6 @@
 import { adminDb } from "@/lib/firebaseAdmin";
-import { generateEmbedding, categorizeEmail, extractDeadlines } from "@/lib/gemini";
+import { categorizeEmail, extractDeadlines } from "@/lib/gemini";
+import { generateNomicEmbedding, generateNomicQueryEmbedding } from "@/lib/nomic-embeddings";
 import { executeAction, getConnectedAccountId } from "@/lib/composio";
 
 /**
@@ -280,6 +281,13 @@ export async function reminderAgent(
 // ==================== EMAIL PROCESSING PIPELINE ====================
 
 /**
+ * Sleep utility for rate limiting
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
  * Main pipeline: Process a single email through all agents
  */
 export async function processEmail(
@@ -306,11 +314,11 @@ export async function processEmail(
     // 1. Categorize email
     const categorization = await categorizeEmail(body, subject);
 
-    // 2. Generate embedding for semantic search
-    const embedding = await generateEmbedding(`${subject}\n\n${body}`);
+    // 2. Generate embedding for semantic search using Nomic
+    const embedding = await generateNomicEmbedding(`${subject}\n\n${body}`);
 
     if (!embedding) {
-      console.error("[Pipeline] Failed to generate embedding");
+      console.error("[Pipeline] Failed to generate embedding - Nomic API may not be configured");
       return;
     }
 
@@ -382,14 +390,29 @@ export async function batchProcessEmails(
   let success = 0;
   let failed = 0;
 
-  for (const email of emails) {
+  for (let i = 0; i < emails.length; i++) {
+    const email = emails[i];
     try {
+      console.log(`[Batch Pipeline] Processing ${i + 1}/${emails.length}`);
       await processEmail(userId, email);
       success++;
+
+      // Rate limiting: Gemini free tier allows 10 requests/minute
+      // Each email uses ~2 Gemini calls (categorize + extractDeadlines)
+      // Sleep 7 seconds between emails to stay under quota (8 emails/min = 16 calls/min with buffer)
+      if (i < emails.length - 1) {
+        console.log(`[Batch Pipeline] Rate limiting: waiting 7 seconds...`);
+        await sleep(7000);
+      }
     } catch (error) {
-      console.error(`[Batch Pipeline] Failed to process email:`, error);
+      console.error(`[Batch Pipeline] Failed to process email ${i + 1}/${emails.length}:`, error);
       console.error(`[Batch Pipeline] Email data:`, email);
       failed++;
+
+      // Still apply rate limiting on errors
+      if (i < emails.length - 1) {
+        await sleep(7000);
+      }
     }
   }
 
@@ -410,11 +433,11 @@ export async function searchEmails(
   console.log(`[Search] Query: "${query}"`);
 
   try {
-    // Generate query embedding
-    const queryEmbedding = await generateEmbedding(query);
+    // Generate query embedding using Nomic
+    const queryEmbedding = await generateNomicQueryEmbedding(query);
 
     if (!queryEmbedding) {
-      throw new Error("Failed to generate query embedding");
+      throw new Error("Failed to generate query embedding - Nomic API may not be configured");
     }
 
     // Fetch all email embeddings
