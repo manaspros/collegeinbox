@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { executeAction } from "@/lib/composio";
+import { executeAction, getConnectedAccountId } from "@/lib/composio";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 /**
@@ -7,7 +7,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
  */
 export async function POST(req: NextRequest) {
   try {
-    const { userId, maxEmails = 100 } = await req.json();
+    const { userId, maxEmails = 100, connectedAccountId } = await req.json();
 
     if (!userId) {
       return NextResponse.json(
@@ -16,11 +16,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Get or use provided connected account ID
+    const accountId = connectedAccountId || await getConnectedAccountId(userId, "gmail");
+
+    if (!accountId) {
+      return NextResponse.json(
+        { error: "No Gmail connection found. Please connect Gmail first." },
+        { status: 400 }
+      );
+    }
+
+    console.log(`Using connected account: ${accountId} for user: ${userId}`);
+
     // Fetch recent emails from college domain using Composio v3
-    const emailsResult = await executeAction(userId, "GMAIL_LIST_EMAILS", {
-      query: "newer_than:30d",
-      maxResults: maxEmails,
-    });
+    const emailsResult = await executeAction(
+      userId,
+      "GMAIL_LIST_EMAILS",
+      {
+        query: "newer_than:30d",
+        maxResults: maxEmails,
+      },
+      accountId // Pass connected account ID
+    );
 
     const emails = emailsResult.data || emailsResult || [];
 
