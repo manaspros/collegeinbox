@@ -30,32 +30,62 @@ export async function getConnectionLink(
   redirectUrl?: string
 ) {
   try {
-    // Step 1: Get auth config for the toolkit
-    const authConfigs = await composio.authConfigs.list({
-      toolkit: app,
-    });
+    console.log(`\n=== Getting connection link for ${app} ===`);
+    console.log(`User ID: ${firebaseUid}`);
 
-    if (!authConfigs.items || authConfigs.items.length === 0) {
-      throw new Error(`No auth config found for toolkit: ${app}. Please create one in the Composio dashboard.`);
+    // Step 1: Get ALL auth configs first to see what's available
+    const allAuthConfigs = await composio.authConfigs.list({});
+    console.log(`Total auth configs available: ${allAuthConfigs.items?.length || 0}`);
+
+    // Filter for the specific toolkit
+    const toolkitConfigs = allAuthConfigs.items?.filter(
+      (config: any) => config.toolkitSlug?.toLowerCase() === app.toLowerCase()
+    ) || [];
+
+    console.log(`Found ${toolkitConfigs.length} auth configs for ${app}`);
+    console.log(`Matching configs:`, toolkitConfigs.map((c: any) => ({
+      id: c.id,
+      toolkit: c.toolkitSlug,
+      isComposioManaged: c.isComposioManaged,
+      status: c.status
+    })));
+
+    if (toolkitConfigs.length === 0) {
+      const availableToolkits = [...new Set(allAuthConfigs.items?.map((c: any) => c.toolkitSlug))];
+      throw new Error(
+        `No auth config found for toolkit: ${app}.\n` +
+        `Available toolkits: ${availableToolkits.join(", ")}\n` +
+        `Create one at: https://app.composio.dev/settings/auth-configs`
+      );
     }
 
-    // Use the first available auth config (preferably Composio-managed)
-    const authConfig = authConfigs.items.find((config: any) => config.isComposioManaged) || authConfigs.items[0];
+    // Prefer: Composio-managed + ACTIVE > ACTIVE > any
+    const authConfig =
+      toolkitConfigs.find((config: any) => config.isComposioManaged && config.status === "ACTIVE") ||
+      toolkitConfigs.find((config: any) => config.status === "ACTIVE") ||
+      toolkitConfigs[0];
 
-    console.log(`Using auth config: ${authConfig.id} for toolkit: ${app}`);
+    console.log(`Selected auth config:`, {
+      id: authConfig.id,
+      toolkit: authConfig.toolkitSlug,
+      isComposioManaged: authConfig.isComposioManaged,
+      status: authConfig.status
+    });
 
     // Step 2: Initiate connection with user_id and auth_config_id
     const connection = await composio.connectedAccounts.initiate(
       firebaseUid,
-      authConfig.id, // auth config ID, not app name!
+      authConfig.id,
       {
         redirectUrl: redirectUrl || `${process.env.NEXT_PUBLIC_APP_URL}/integrations`,
       }
     );
 
+    console.log(`✅ Connection initiated successfully`);
+    console.log(`Redirect URL: ${connection.redirectUrl}`);
     return connection.redirectUrl;
   } catch (error: any) {
-    console.error("Error generating connection link:", error);
+    console.error("❌ Error generating connection link:", error);
     throw new Error(error.message || "Failed to generate connection link");
   }
 }
