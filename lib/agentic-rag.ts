@@ -304,25 +304,22 @@ export async function processEmail(
       throw new Error('Email ID is required and must be a non-empty string');
     }
 
-    console.log(`\n[Pipeline] Processing email: ${emailId}`);
+    console.log(`[Pipeline] Processing email: ${emailId}`);
 
     const subject = emailData.subject || "";
     const body = emailData.body || emailData.snippet || "";
     const from = emailData.from || "";
     const date = emailData.date || new Date().toISOString();
 
-    // 1. Categorize email
-    const categorization = await categorizeEmail(body, subject);
-
-    // 2. Generate embedding for semantic search using Nomic
-    const embedding = await generateNomicEmbedding(`${subject}\n\n${body}`);
+    // Generate embedding using Nomic (NO GEMINI CALLS - fast & no quota limits!)
+    const embedding = await generateNomicEmbedding(`Subject: ${subject}\n\nFrom: ${from}\n\nBody: ${body}`);
 
     if (!embedding) {
-      console.error("[Pipeline] Failed to generate embedding - Nomic API may not be configured");
+      console.error("[Pipeline] Failed to generate embedding - check NOMIC_API_KEY");
       return;
     }
 
-    // 3. Store email with embedding
+    // Store email with embedding only - AI will analyze on-demand
     const emailEmbedding: EmailEmbedding = {
       id: emailId,
       emailId,
@@ -332,10 +329,10 @@ export async function processEmail(
       snippet: body.substring(0, 200),
       body,
       embedding,
-      category: categorization.category,
-      courseName: categorization.courseName,
-      hasDeadline: categorization.hasDeadline,
-      processed: false,
+      category: "unprocessed", // AI agent analyzes when user asks
+      courseName: null,
+      hasDeadline: false,
+      processed: true,
       createdAt: new Date(),
     };
 
@@ -346,27 +343,7 @@ export async function processEmail(
       .doc(emailId)
       .set(emailEmbedding);
 
-    // 4. Run parallel agents
-    const [deadlines, documents, alerts, reminder] = await Promise.all([
-      deadlineAgent(userId, emailId, subject, body),
-      documentAgent(userId, emailId, emailData, categorization.courseName),
-      alertAgent(userId, emailId, subject, body, categorization.courseName),
-      reminderAgent(userId, emailId, subject, body),
-    ]);
-
-    // 5. Mark as processed
-    await adminDb
-      .collection("email_embeddings")
-      .doc(userId)
-      .collection("emails")
-      .doc(emailId)
-      .update({ processed: true });
-
-    console.log(`[Pipeline] ✅ Email processed successfully`);
-    console.log(`  - Deadlines: ${deadlines.length}`);
-    console.log(`  - Documents: ${documents.length}`);
-    console.log(`  - Alerts: ${alerts.length}`);
-    console.log(`  - Has Reminder: ${reminder.hasReminder}`);
+    console.log(`[Pipeline] ✅ Email vectorized`);
   } catch (error) {
     console.error("[Pipeline] Error processing email:", error);
     throw error;
@@ -397,22 +374,15 @@ export async function batchProcessEmails(
       await processEmail(userId, email);
       success++;
 
-      // Rate limiting: Gemini free tier allows 10 requests/minute
-      // Each email uses ~2 Gemini calls (categorize + extractDeadlines)
-      // Sleep 7 seconds between emails to stay under quota (8 emails/min = 16 calls/min with buffer)
-      if (i < emails.length - 1) {
-        console.log(`[Batch Pipeline] Rate limiting: waiting 7 seconds...`);
-        await sleep(7000);
+      // Small delay to avoid overwhelming Nomic API (optional)
+      if (i < emails.length - 1 && i % 10 === 9) {
+        console.log(`[Batch Pipeline] Processed 10 emails, brief pause...`);
+        await sleep(1000); // 1 second pause every 10 emails
       }
     } catch (error) {
       console.error(`[Batch Pipeline] Failed to process email ${i + 1}/${emails.length}:`, error);
       console.error(`[Batch Pipeline] Email data:`, email);
       failed++;
-
-      // Still apply rate limiting on errors
-      if (i < emails.length - 1) {
-        await sleep(7000);
-      }
     }
   }
 
