@@ -20,96 +20,73 @@ export async function POST(req: NextRequest) {
       "googledrive",
     ]);
 
-    // RAG: Fetch cached data from Firestore (instant, no API calls!)
+    // RAG: Use semantic search to find relevant emails
     let ragContext = "";
     try {
-      console.log("Fetching RAG context from Firestore...");
+      console.log("Using semantic search for RAG context...");
 
-      // Get cached deadlines, alerts, and documents
-      const [deadlines, alerts, documents] = await Promise.all([
-        getDeadlines(userId),
-        getAlerts(userId),
-        getDocuments(userId),
-      ]);
+      // Get last user message to search for relevant emails
+      const lastUserMessage = messages.filter((m: any) => m.role === "user").pop();
+      const query = lastUserMessage?.content || "";
 
-      // Build structured context
-      if (deadlines.length > 0 || alerts.length > 0 || documents.length > 0) {
-        ragContext = `\n\n**CACHED DATA (from your emails):**\n`;
+      if (query) {
+        // Semantic search: Find most relevant emails
+        const relevantEmails = await searchEmails(userId, query, 5); // Top 5 most relevant
 
-        // Add upcoming deadlines
-        if (deadlines.length > 0) {
-          ragContext += `\n**UPCOMING DEADLINES (${deadlines.length} total):**\n`;
-          deadlines.slice(0, 10).forEach((d: any) => {
-            ragContext += `- ${d.title} (${d.course}) - Due: ${d.dueDate} [Priority: ${d.priority}]\n`;
+        if (relevantEmails.length > 0) {
+          ragContext = `\n\n**RELEVANT EMAILS (found using semantic search):**\n`;
+          relevantEmails.forEach((email: any, idx: number) => {
+            ragContext += `\n--- Email ${idx + 1} ---\n`;
+            ragContext += `Subject: ${email.subject}\n`;
+            ragContext += `From: ${email.from}\n`;
+            ragContext += `Date: ${email.date}\n`;
+            ragContext += `Content: ${email.body.substring(0, 500)}${email.body.length > 500 ? '...' : ''}\n`;
           });
+          console.log(`Found ${relevantEmails.length} relevant emails via semantic search`);
+        } else {
+          ragContext = `\n\n**NOTE:** No relevant emails found. User may need to sync emails first.`;
+          console.log("No emails found in vector database");
         }
-
-        // Add recent alerts
-        if (alerts.length > 0) {
-          ragContext += `\n**RECENT ALERTS (${alerts.length} total):**\n`;
-          alerts.slice(0, 5).forEach((a: any) => {
-            ragContext += `- ${a.message} (${a.course}) - ${a.type}\n`;
-          });
-        }
-
-        // Add documents
-        if (documents.length > 0) {
-          ragContext += `\n**DOCUMENTS (${documents.length} total):**\n`;
-          const docsByCourse = documents.reduce((acc: any, doc: any) => {
-            if (!acc[doc.course]) acc[doc.course] = [];
-            acc[doc.course].push(doc);
-            return acc;
-          }, {});
-          Object.entries(docsByCourse).slice(0, 5).forEach(([course, docs]: [string, any]) => {
-            ragContext += `- ${course}: ${docs.length} files (${docs.map((d: any) => d.filename).slice(0, 3).join(", ")})\n`;
-          });
-        }
-
-        console.log(`Added RAG context: ${deadlines.length} deadlines, ${alerts.length} alerts, ${documents.length} documents`);
-      } else {
-        ragContext = `\n\n**NOTE:** No cached email data found. User should sync emails first using the sync button.`;
-        console.log("No RAG data available - user needs to sync emails");
       }
     } catch (error) {
       console.error("Failed to fetch RAG context:", error);
-      ragContext = `\n\n**NOTE:** Could not load cached data. Some features may be limited.`;
+      ragContext = `\n\n**NOTE:** Could not search emails. Some features may be limited.`;
     }
 
     // System prompt to guide the AI (enhanced with RAG)
     const systemPrompt = `You are an intelligent academic assistant for college students. You have access to:
 
-- Gmail: Read, search, and send emails
-- Google Classroom: Access courses, assignments, materials, and submissions
-- Google Calendar: View and create events, find deadlines
-- Google Drive: Search and access files and documents
+- **Semantic Email Search**: The system has already found the most relevant emails for this question (see below)
+- **Gmail Tools**: Use only if you need fresh/real-time data not in the search results
+- **Google Classroom**: Access courses, assignments, materials, and submissions
+- **Google Calendar**: View and create events, find deadlines
+- **Google Drive**: Search and access files and documents
 
-Your role is to help students:
-1. Find and track assignment deadlines
-2. Organize course materials and documents
-3. Monitor schedule changes and important announcements
-4. Search for specific files and emails
-5. Summarize long emails and course updates
+Your role is to help students by:
+1. **Analyzing emails** found through semantic search to extract deadlines, assignments, and important information
+2. **Identifying patterns** across multiple emails (recurring themes, upcoming deadlines, course requirements)
+3. **Summarizing key information** from professors and course staff
+4. **Suggesting actions** like adding deadlines to calendar or organizing materials
+5. **Answering questions** directly from email content
 
-When a user asks about deadlines, assignments, emails, or schedule:
-- FIRST check the CACHED DATA below - this is extracted from the student's emails
-- The cached data includes deadlines, alerts, and documents already processed
-- Only use Composio tools if you need fresh/real-time data not in the cache
-- Provide accurate, specific information with dates and details
-- Suggest relevant actions (e.g., "Would you like me to add this to your calendar?")
-- Be concise but helpful
+How to respond:
+- **FIRST** analyze the relevant emails provided below (found via semantic search)
+- **Extract information** like deadlines, assignment details, exam dates, schedule changes
+- **Provide specific details** with dates, times, course names from the emails
+- **Quote key parts** of emails when relevant
+- **Only use Composio tools** if the emails don't contain the answer
+- Be concise and helpful
 
-Examples of queries you should handle:
-- "Show me all deadlines this week"
-- "Find PDFs from my Machine Learning course"
-- "What assignments are due this weekend?"
-- "Search for unread emails from professors"
-- "When is my next exam?"
-- "What schedule changes do I have?"
-- "Show me documents from my Database course"
+Examples of what you can do:
+- "Show me all deadlines this week" → Analyze emails to find and list deadlines
+- "What did my professor say about the exam?" → Find and summarize professor's email
+- "Find assignments for Machine Learning" → Search emails for ML course assignments
+- "When is the project due?" → Extract deadline from relevant emails
+- "Any schedule changes?" → Identify cancellations, room changes from emails
 
 ${ragContext}
 
-**IMPORTANT:** If the cached data shows no information, politely inform the user they need to sync their emails first (there's a sync button in the dashboard). Otherwise, use the cached data above for instant answers.`;
+**IMPORTANT:** The emails above were found using semantic search based on the user's question. Analyze them carefully to provide accurate answers. If no emails are shown, the user needs to sync their emails first (sync button in dashboard).`;
 
     const result = await streamText({
       model: google("gemini-2.0-flash-exp"),
