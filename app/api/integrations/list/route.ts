@@ -26,12 +26,12 @@ export async function GET(req: NextRequest) {
       name: app,
       connected: connections.some(
         (conn: any) =>
-          conn.appName.toLowerCase() === app.toLowerCase() &&
+          conn.toolkitSlug?.toLowerCase() === app.toLowerCase() &&
           conn.status === "ACTIVE"
       ),
       connection: connections.find(
         (conn: any) =>
-          conn.appName.toLowerCase() === app.toLowerCase() &&
+          conn.toolkitSlug?.toLowerCase() === app.toLowerCase() &&
           conn.status === "ACTIVE"
       ),
     }));
