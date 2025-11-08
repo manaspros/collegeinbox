@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getComposioEntity } from "@/lib/composio";
 import { collection, query, where, getDocs, addDoc, doc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { CLASSROOM_ACTIONS, GMAIL_ACTIONS, executeComposioAction } from "@/lib/composio-actions";
 
 export async function GET(req: NextRequest) {
   try {
@@ -28,15 +29,21 @@ export async function GET(req: NextRequest) {
     // Fetch Google Classroom assignments
     let classroomDeadlines: any[] = [];
     try {
-      const coursesResult = await entity.execute("googleclassroom_list_courses", {});
+      const coursesResult = await executeComposioAction(
+        entity,
+        CLASSROOM_ACTIONS.LIST_COURSES,
+        {}
+      );
       const courses = coursesResult.data?.courses || [];
 
       for (const course of courses.slice(0, 5)) {
         // Limit to first 5 courses
         try {
-          const assignmentsResult = await entity.execute("googleclassroom_list_coursework", {
-            courseId: course.id,
-          });
+          const assignmentsResult = await executeComposioAction(
+            entity,
+            CLASSROOM_ACTIONS.LIST_COURSEWORK,
+            { courseId: course.id }
+          );
 
           const assignments = assignmentsResult.data?.courseWork || [];
           for (const assignment of assignments) {
@@ -70,10 +77,14 @@ export async function GET(req: NextRequest) {
     // Fetch Gmail for deadline keywords
     let gmailDeadlines: any[] = [];
     try {
-      const gmailResult = await entity.execute("gmail_list_emails", {
-        query: "deadline OR due date OR submit by",
-        maxResults: 10,
-      });
+      const gmailResult = await executeComposioAction(
+        entity,
+        GMAIL_ACTIONS.LIST_EMAILS,
+        {
+          query: "deadline OR due date OR submit by",
+          maxResults: 10,
+        }
+      );
 
       const emails = gmailResult.data?.messages || [];
       // Parse emails for deadlines (simplified)
