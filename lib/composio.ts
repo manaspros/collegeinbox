@@ -230,8 +230,20 @@ export async function getToolsForEntity(firebaseUid: string, apps: string[]) {
       toolkits: apps,
     });
     return tools;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error getting tools:", error);
+    console.error("Error details:", error.message);
+
+    // If version error, try without specifying entityId
+    if (error.message?.includes("version")) {
+      try {
+        const fallbackTools = await toolset.getTools({ apps });
+        console.log("Using fallback tools without entityId");
+        return fallbackTools;
+      } catch (fallbackError) {
+        console.error("Fallback also failed:", fallbackError);
+      }
+    }
     return [];
   }
 }

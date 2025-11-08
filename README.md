@@ -57,16 +57,9 @@ A single, clean page that summarizes all crucial information:
 - **Google Drive Integration**: Search and access course files (ready)
 - **Composio v3**: Latest integration platform with enhanced stability
 
-### Bonus Features 🚀
-- **Calendar Heatmap**: GitHub-style visualization
-- **Analytics Dashboard**: Charts showing emails/week, deadlines/month
-- **Faculty Filter**: View only professor emails
-- **8 AM Daily Routine**: Automated morning check
-- **Push Notifications**: Browser notifications for critical changes
-- **NLP File Search**: Semantic search with Pinecone
-- **Voice Interaction**: Speech-to-text and text-to-speech
+The AI agent uses Composio tools to pull data from Gmail, Google Classroom, Google Drive, and Calendar, with one-click sync capabilities.
 
-## Tech Stack
+## ✨ Features
 
 - **Frontend**: Next.js 16 (React 19), Material-UI v7, TypeScript
 - **Backend**: Next.js API Routes, Firebase Auth & Firestore
@@ -74,37 +67,149 @@ A single, clean page that summarizes all crucial information:
 - **Integrations**: Composio v3 (@composio/core v0.1.55)
 - **Utilities**: date-fns, Recharts, Pinecone (optional), node-cron
 
-## Quick Start
+### 🚀 Advanced Features
+- 📊 **Analytics Dashboard**: Recharts visualizations
+  - Emails per week (line chart)
+  - Deadlines per month (bar chart)
+  - Course distribution (pie chart)
+- 🗓️ **Calendar Heatmap**: GitHub-style activity visualization
+- 🎤 **Voice Assistant**: Web Speech API for voice commands
+- ⏰ **8 AM Daily Routine**: Automated morning digest via email
+- 🔍 **Semantic Search**: Pinecone + Gemini embeddings for NLP file search
+- 🔔 **Web Push Notifications**: Browser notifications for critical updates
+- 📧 **Email Summarization**: 3-sentence summaries for long emails
+- 🏷️ **Auto Course Tagging**: Heuristic + AI-powered course detection
 
+## 🛠️ Tech Stack
+
+### Frontend & Backend
+- **Next.js 16** (App Router) with React 19
+- **TypeScript** for type safety
+- **Material-UI v7** for beautiful UI components
+- **Tailwind CSS** for utility styling
+
+### AI & Integrations
+- **Google Gemini 2.0 Flash** for AI agent with function calling
+- **Composio** for OAuth management and 250+ tool integrations
+- **Vercel AI SDK** for streaming chat responses
+
+### Database & Auth
+- **Firebase Firestore** for document storage and caching
+- **Firebase Authentication** (Google + Email/Password)
+
+### Analytics & Visualization
+- **Recharts** for analytics charts
+- **react-calendar-heatmap** for GitHub-style heatmap
+- **date-fns** for date manipulation
+
+### Advanced Features
+- **Pinecone** for vector search and semantic file search
+- **Web Speech API** for voice commands
+- **web-push** for browser notifications
+- **node-cron / Vercel Cron** for scheduled tasks
+
+## 🚀 Quick Start
+
+### 1. Install Dependencies
 ```bash
 npm install
-cp .env.example .env.local
-# Fill in your API keys in .env.local
+```
+
+### 2. Set Up Environment Variables
+```bash
+cp .env.local.example .env.local
+```
+
+Fill in your API keys in `.env.local`:
+```env
+# Required
+COMPOSIO_API_KEY=your_composio_key
+GEMINI_API_KEY=your_gemini_key
+NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_domain
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_bucket
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Optional (for advanced features)
+PINECONE_API_KEY=your_pinecone_key
+PINECONE_ENVIRONMENT=your_env
+PINECONE_INDEX=collegiate-inbox
+VAPID_PUBLIC_KEY=your_vapid_public
+VAPID_PRIVATE_KEY=your_vapid_private
+CRON_SECRET=your_cron_secret
+```
+
+### 3. Get API Keys
+
+#### Composio (Required)
+1. Go to [Composio Dashboard](https://app.composio.dev)
+2. Sign up and navigate to Settings
+3. Copy your API Key
+
+#### Google Gemini (Required)
+1. Go to [Google AI Studio](https://aistudio.google.com/apikey)
+2. Click "Create API Key"
+3. Copy the generated key
+
+#### Firebase (Required)
+1. Go to [Firebase Console](https://console.firebase.google.com)
+2. Create a new project
+3. Enable Authentication (Google + Email/Password)
+4. Enable Firestore Database (test mode)
+5. Copy config from Project Settings
+
+#### Pinecone (Optional - for semantic search)
+1. Go to [Pinecone](https://www.pinecone.io/)
+2. Sign up and create an index named `collegiate-inbox`
+3. Copy API key and environment
+
+### 4. Run Development Server
+```bash
 npm run dev
 ```
 
-Open http://localhost:3000
+Open [http://localhost:3000](http://localhost:3000)
 
-## Environment Setup
+## 📖 Usage Guide
 
-Get API keys from:
-- Composio: https://app.composio.dev/settings
-- Gemini: https://aistudio.google.com/apikey
-- Firebase: https://console.firebase.google.com
-- Pinecone (optional): https://www.pinecone.io/
+### Getting Started
+1. **Sign In**: Use Google or Email/Password
+2. **Connect Apps**: Go to `/integrations` and connect:
+   - Gmail
+   - Google Classroom
+   - Google Calendar
+   - Google Drive
+3. **Start Chatting**: Ask the AI assistant anything!
 
-## Usage
+### Example Commands
+```
+"Show me all deadlines this week"
+"Find PDFs from my Machine Learning course"
+"What assignments are due this weekend?"
+"Unread emails from professors last 7 days"
+"Download latest lecture slides for DS-204"
+"Create a 2-hour study block tomorrow at 6 PM"
+"Summarize the last 5 important emails"
+```
 
-1. Sign in with Google or Email
-2. Connect apps at `/integrations`
-3. Start chatting with the AI assistant
+### Dashboard Navigation
+- **AI Assistant Tab**: Natural language chat interface
+- **Deadlines Tab**: View all upcoming deadlines with countdown
+- **Documents Tab**: Browse and filter course documents
+- **Alerts Tab**: Schedule changes and urgent notifications
+- **Voice Assistant Tab**: Use voice commands
 
-Example commands:
-- "Show me all deadlines this week"
-- "Find PDFs from my Machine Learning course"
-- "What's due this weekend?"
+### Analytics Page
+Visit `/analytics` to see:
+- Email activity trends
+- Deadline distribution by month
+- Course workload breakdown
+- Activity heatmap
 
-## How It Works
+## 🏗️ Architecture
 
 ```
 User Gmail → Composio v3 → API Routes → Gemini AI Analysis → Critical Path Dashboard
@@ -125,9 +230,49 @@ User Gmail → Composio v3 → API Routes → Gemini AI Analysis → Critical Pa
 
 Composio v3 handles secure OAuth and provides 250+ tools. Gemini AI understands natural language and calls the right tools automatically.
 
-## Deploy
+Enable browser notifications to receive real-time alerts for:
+- Cancelled classes
+- Rescheduled events
+- Room changes
+- Urgent announcements
 
+The app uses Web Push API with VAPID keys.
+
+## 🎤 Voice Commands
+
+Activate voice assistant in the dashboard:
+1. Click the microphone icon
+2. Say commands like:
+   - "What's due today?"
+   - "Show my deadlines"
+   - "Check my emails"
+   - "Find documents"
+3. The AI will respond with voice feedback
+
+## 📊 Firestore Schema
+
+```
+users/{uid}
+  - email, displayName, createdAt
+
+cache_deadlines/{uid}/items/{autoId}
+  - title, course, dueAt, source, url, type, createdAt
+
+cache_documents/{uid}/files/{autoId}
+  - name, course, mime, driveFileId, emailId, url, createdAt
+
+cache_alerts/{uid}/items/{autoId}
+  - kind, subject, date, link, course
+
+push_subscriptions/{uid}
+  - subscription, createdAt
+```
+
+## 🚢 Deployment
+
+### Deploy to Vercel
 ```bash
+npm install -g vercel
 vercel
 ```
 

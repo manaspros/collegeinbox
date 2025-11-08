@@ -2,16 +2,26 @@
 
 import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 import { useRouter } from "next/navigation";
-import { Box, Container, Typography, Grid, AppBar, Toolbar, Button, IconButton } from "@mui/material";
+import { Box, Container, Typography, Grid, AppBar, Toolbar, Button, IconButton, Tab, Tabs } from "@mui/material";
+import { useState } from "react";
 import ChatInterface from "@/components/ChatInterface";
 import CriticalPathDashboard from "@/components/CriticalPathDashboard";
 import LogoutIcon from "@mui/icons-material/Logout";
-import SettingsIcon from "@mui/icons-material/Settings";
+import AnalyticsIcon from "@mui/icons-material/Analytics";
 import Link from "next/link";
 
 export default function Dashboard() {
   const { user, loading, signOut } = useFirebaseAuth();
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState(0);
+
+  // Handler for voice commands
+  const handleVoiceCommand = (command: string) => {
+    // Switch to AI Assistant tab and pass the command
+    setActiveTab(0);
+    // You could also pass the command to ChatInterface via context or props
+    console.log("Voice command:", command);
+  };
 
   if (loading) {
     return (
@@ -46,6 +56,9 @@ export default function Dashboard() {
           <Button color="inherit" component={Link} href="/setup">
             Setup
           </Button>
+          <Button color="inherit" component={Link} href="/analytics" startIcon={<AnalyticsIcon />}>
+            Analytics
+          </Button>
           <IconButton color="inherit" onClick={signOut}>
             <LogoutIcon />
           </IconButton>
@@ -66,10 +79,28 @@ export default function Dashboard() {
 
           {/* AI Chat Interface */}
           <Grid item xs={12} lg={8}>
-            <ChatInterface />
+            {/* Tabs for different views */}
+            <Box sx={{ backgroundColor: "white", borderRadius: 2, boxShadow: 1, mb: 3 }}>
+              <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
+                <Tab label="AI Assistant" />
+                <Tab label="Deadlines" />
+                <Tab label="Documents" />
+                <Tab label="Alerts" />
+                <Tab label="Voice Assistant" />
+              </Tabs>
+            </Box>
+
+            {/* Tab Content */}
+            <Box sx={{ backgroundColor: "white", p: 3, borderRadius: 2, boxShadow: 1 }}>
+              {activeTab === 0 && <ChatInterface />}
+              {activeTab === 1 && user && <DeadlinesList userId={user.uid} />}
+              {activeTab === 2 && user && <DocumentRepository userId={user.uid} />}
+              {activeTab === 3 && user && <AlertsFeed userId={user.uid} />}
+              {activeTab === 4 && user && <VoiceAssistant userId={user.uid} onCommand={handleVoiceCommand} />}
+            </Box>
           </Grid>
 
-          {/* Quick Stats Sidebar */}
+          {/* Right Column - Quick Stats Sidebar */}
           <Grid item xs={12} lg={4}>
             <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
               {/* Quick Actions */}
