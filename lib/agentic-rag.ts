@@ -1,0 +1,511 @@
+import { db } from "@/lib/firebase";
+import { collection, doc, setDoc, getDocs, query, where, orderBy, limit, Timestamp, addDoc } from "firebase/firestore";
+import { generateEmbedding, categorizeEmail, extractDeadlines } from "@/lib/gemini";
+import { executeAction, getConnectedAccountId } from "@/lib/composio";
+
+/**
+ * Agentic RAG System for Collegiate Inbox Navigator
+ *
+ * This system automatically:
+ * 1. Converts emails to vector embeddings
+ * 2. Extracts deadlines, documents, and alerts using AI agents
+ * 3. Stores everything in Firestore for instant dashboard access
+ * 4. Enables semantic search over email content
+ */
+
+// ==================== TYPES ====================
+
+export interface EmailEmbedding {
+  id: string;
+  emailId: string;
+  subject: string;
+  from: string;
+  date: string;
+  snippet: string;
+  body: string;
+  embedding: number[];
+  category: string;
+  courseName: string | null;
+  hasDeadline: boolean;
+  processed: boolean;
+  createdAt: Date;
+}
+
+export interface Deadline {
+  id: string;
+  emailId: string;
+  title: string;
+  course: string;
+  dueDate: string;
+  dueTime?: string;
+  description: string;
+  type: "assignment" | "exam" | "project" | "submission";
+  priority: "high" | "medium" | "low";
+  addedToCalendar: boolean;
+  createdAt: Date;
+}
+
+export interface ScheduleChange {
+  id: string;
+  emailId: string;
+  type: "cancelled" | "rescheduled" | "room_change" | "urgent";
+  course: string;
+  message: string;
+  date: string;
+  details: string;
+  createdAt: Date;
+}
+
+export interface Document {
+  id: string;
+  emailId: string;
+  filename: string;
+  course: string;
+  type: "pdf" | "docx" | "ppt" | "xlsx" | "other";
+  category: "assignment" | "lecture" | "notes" | "syllabus";
+  url?: string;
+  mimeType?: string;
+  size?: number;
+  createdAt: Date;
+}
+
+// ==================== AGENTS ====================
+
+/**
+ * Deadline Extraction Agent
+ * Analyzes email content and extracts all deadlines/due dates
+ */
+export async function deadlineAgent(
+  userId: string,
+  emailId: string,
+  subject: string,
+  body: string
+): Promise<Deadline[]> {
+  console.log(`[Deadline Agent] Processing email: ${emailId}`);
+
+  try {
+    const extractedDeadlines = await extractDeadlines(`${subject}\n\n${body}`);
+
+    const deadlines: Deadline[] = extractedDeadlines.map((d: any, index: number) => ({
+      id: `${emailId}_deadline_${index}`,
+      emailId,
+      title: d.title,
+      course: d.course || "Unknown",
+      dueDate: d.date,
+      dueTime: d.time || undefined,
+      description: `From email: ${subject}`,
+      type: d.type || "assignment",
+      priority: determinePriority(d.date),
+      addedToCalendar: false,
+      createdAt: new Date(),
+    }));
+
+    // Save to Firestore
+    for (const deadline of deadlines) {
+      await setDoc(
+        doc(db, "deadlines", userId, "events", deadline.id),
+        deadline
+      );
+    }
+
+    console.log(`[Deadline Agent] Extracted ${deadlines.length} deadlines`);
+    return deadlines;
+  } catch (error) {
+    console.error("[Deadline Agent] Error:", error);
+    return [];
+  }
+}
+
+/**
+ * Document Extraction Agent
+ * Finds and catalogs all attachments (PDFs, DOCX, PPT, etc.)
+ */
+export async function documentAgent(
+  userId: string,
+  emailId: string,
+  emailData: any,
+  courseName: string | null
+): Promise<Document[]> {
+  console.log(`[Document Agent] Processing email: ${emailId}`);
+
+  try {
+    const attachments = emailData.attachments || [];
+    const documents: Document[] = [];
+
+    for (const attachment of attachments) {
+      const fileType = getFileType(attachment.filename || attachment.mimeType);
+
+      if (["pdf", "docx", "ppt", "xlsx"].includes(fileType)) {
+        const document: Document = {
+          id: `${emailId}_doc_${attachment.id || documents.length}`,
+          emailId,
+          filename: attachment.filename,
+          course: courseName || "Unknown",
+          type: fileType as any,
+          category: categorizeDocument(attachment.filename),
+          url: attachment.url,
+          mimeType: attachment.mimeType,
+          size: attachment.size,
+          createdAt: new Date(),
+        };
+
+        documents.push(document);
+
+        // Save to Firestore
+        await setDoc(
+          doc(db, "documents", userId, "files", document.id),
+          document
+        );
+      }
+    }
+
+    console.log(`[Document Agent] Extracted ${documents.length} documents`);
+    return documents;
+  } catch (error) {
+    console.error("[Document Agent] Error:", error);
+    return [];
+  }
+}
+
+/**
+ * Alert Detection Agent
+ * Detects schedule changes, cancellations, urgent notices
+ */
+export async function alertAgent(
+  userId: string,
+  emailId: string,
+  subject: string,
+  body: string,
+  courseName: string | null
+): Promise<ScheduleChange[]> {
+  console.log(`[Alert Agent] Processing email: ${emailId}`);
+
+  try {
+    const alerts: ScheduleChange[] = [];
+    const alertKeywords = {
+      cancelled: /cancel{1,2}ed|class cancel{1,2}ed/i,
+      rescheduled: /reschedule[d]?|moved to|new time/i,
+      room_change: /room change|new location|moved to room/i,
+      urgent: /urgent|important notice|immediate attention/i,
+    };
+
+    const combinedText = `${subject}\n${body}`.toLowerCase();
+
+    for (const [type, regex] of Object.entries(alertKeywords)) {
+      if (regex.test(combinedText)) {
+        const alert: ScheduleChange = {
+          id: `${emailId}_alert_${type}`,
+          emailId,
+          type: type as any,
+          course: courseName || "Unknown",
+          message: subject,
+          date: new Date().toISOString(),
+          details: body.substring(0, 200),
+          createdAt: new Date(),
+        };
+
+        alerts.push(alert);
+
+        // Save to Firestore
+        await setDoc(
+          doc(db, "alerts", userId, "items", alert.id),
+          alert
+        );
+      }
+    }
+
+    console.log(`[Alert Agent] Detected ${alerts.length} alerts`);
+    return alerts;
+  } catch (error) {
+    console.error("[Alert Agent] Error:", error);
+    return [];
+  }
+}
+
+/**
+ * Reminder Detection Agent
+ * Detects time-based reminders and offers calendar sync
+ */
+export async function reminderAgent(
+  userId: string,
+  emailId: string,
+  subject: string,
+  body: string
+): Promise<{ hasReminder: boolean; suggestedEvent?: any }> {
+  console.log(`[Reminder Agent] Processing email: ${emailId}`);
+
+  try {
+    // Detect time/date patterns
+    const timePatterns = [
+      /(\d{1,2}):(\d{2})\s*(am|pm|AM|PM)/,
+      /(\d{1,2})\s*(am|pm|AM|PM)/,
+      /(tomorrow|today|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i,
+      /(\d{4}-\d{2}-\d{2})/,
+      /(\d{1,2}\/\d{1,2}\/\d{2,4})/,
+    ];
+
+    const combinedText = `${subject}\n${body}`;
+    let hasReminder = false;
+    let suggestedEvent = null;
+
+    for (const pattern of timePatterns) {
+      if (pattern.test(combinedText)) {
+        hasReminder = true;
+
+        // Extract potential event details
+        suggestedEvent = {
+          title: subject,
+          description: body.substring(0, 500),
+          emailId,
+          extractedTime: combinedText.match(pattern)?.[0],
+        };
+
+        break;
+      }
+    }
+
+    console.log(`[Reminder Agent] Has reminder: ${hasReminder}`);
+    return { hasReminder, suggestedEvent };
+  } catch (error) {
+    console.error("[Reminder Agent] Error:", error);
+    return { hasReminder: false };
+  }
+}
+
+// ==================== EMAIL PROCESSING PIPELINE ====================
+
+/**
+ * Main pipeline: Process a single email through all agents
+ */
+export async function processEmail(
+  userId: string,
+  emailData: any
+): Promise<void> {
+  console.log(`\n[Pipeline] Processing email: ${emailData.id}`);
+
+  try {
+    const emailId = emailData.id;
+    const subject = emailData.subject || "";
+    const body = emailData.body || emailData.snippet || "";
+    const from = emailData.from || "";
+    const date = emailData.date || new Date().toISOString();
+
+    // 1. Categorize email
+    const categorization = await categorizeEmail(body, subject);
+
+    // 2. Generate embedding for semantic search
+    const embedding = await generateEmbedding(`${subject}\n\n${body}`);
+
+    if (!embedding) {
+      console.error("[Pipeline] Failed to generate embedding");
+      return;
+    }
+
+    // 3. Store email with embedding
+    const emailEmbedding: EmailEmbedding = {
+      id: emailId,
+      emailId,
+      subject,
+      from,
+      date,
+      snippet: body.substring(0, 200),
+      body,
+      embedding,
+      category: categorization.category,
+      courseName: categorization.courseName,
+      hasDeadline: categorization.hasDeadline,
+      processed: false,
+      createdAt: new Date(),
+    };
+
+    await setDoc(
+      doc(db, "email_embeddings", userId, "emails", emailId),
+      {
+        ...emailEmbedding,
+        createdAt: Timestamp.now(),
+      }
+    );
+
+    // 4. Run parallel agents
+    const [deadlines, documents, alerts, reminder] = await Promise.all([
+      deadlineAgent(userId, emailId, subject, body),
+      documentAgent(userId, emailId, emailData, categorization.courseName),
+      alertAgent(userId, emailId, subject, body, categorization.courseName),
+      reminderAgent(userId, emailId, subject, body),
+    ]);
+
+    // 5. Mark as processed
+    await setDoc(
+      doc(db, "email_embeddings", userId, "emails", emailId),
+      { processed: true },
+      { merge: true }
+    );
+
+    console.log(`[Pipeline] ✅ Email processed successfully`);
+    console.log(`  - Deadlines: ${deadlines.length}`);
+    console.log(`  - Documents: ${documents.length}`);
+    console.log(`  - Alerts: ${alerts.length}`);
+    console.log(`  - Has Reminder: ${reminder.hasReminder}`);
+  } catch (error) {
+    console.error("[Pipeline] Error processing email:", error);
+    throw error;
+  }
+}
+
+/**
+ * Batch process multiple emails
+ */
+export async function batchProcessEmails(
+  userId: string,
+  emails: any[]
+): Promise<{ success: number; failed: number }> {
+  console.log(`\n[Batch Pipeline] Processing ${emails.length} emails`);
+
+  let success = 0;
+  let failed = 0;
+
+  for (const email of emails) {
+    try {
+      await processEmail(userId, email);
+      success++;
+    } catch (error) {
+      console.error(`[Batch Pipeline] Failed to process email ${email.id}:`, error);
+      failed++;
+    }
+  }
+
+  console.log(`[Batch Pipeline] ✅ Complete: ${success} success, ${failed} failed`);
+  return { success, failed };
+}
+
+// ==================== SEMANTIC SEARCH ====================
+
+/**
+ * Search emails using semantic similarity
+ */
+export async function searchEmails(
+  userId: string,
+  query: string,
+  topK: number = 10
+): Promise<EmailEmbedding[]> {
+  console.log(`[Search] Query: "${query}"`);
+
+  try {
+    // Generate query embedding
+    const queryEmbedding = await generateEmbedding(query);
+
+    if (!queryEmbedding) {
+      throw new Error("Failed to generate query embedding");
+    }
+
+    // Fetch all email embeddings
+    const emailsSnapshot = await getDocs(
+      collection(db, "email_embeddings", userId, "emails")
+    );
+
+    const emails: EmailEmbedding[] = [];
+    emailsSnapshot.forEach((doc) => {
+      emails.push(doc.data() as EmailEmbedding);
+    });
+
+    // Calculate cosine similarity
+    const results = emails.map((email) => ({
+      email,
+      similarity: cosineSimilarity(queryEmbedding, email.embedding),
+    }));
+
+    // Sort by similarity and return top K
+    results.sort((a, b) => b.similarity - a.similarity);
+
+    console.log(`[Search] Found ${results.length} results, returning top ${topK}`);
+    return results.slice(0, topK).map((r) => r.email);
+  } catch (error) {
+    console.error("[Search] Error:", error);
+    return [];
+  }
+}
+
+// ==================== DASHBOARD DATA RETRIEVAL ====================
+
+/**
+ * Get all deadlines for dashboard (from Firestore, not API!)
+ */
+export async function getDeadlines(userId: string): Promise<Deadline[]> {
+  const snapshot = await getDocs(
+    query(
+      collection(db, "deadlines", userId, "events"),
+      orderBy("dueDate", "asc")
+    )
+  );
+
+  return snapshot.docs.map((doc) => doc.data() as Deadline);
+}
+
+/**
+ * Get all alerts for dashboard
+ */
+export async function getAlerts(userId: string): Promise<ScheduleChange[]> {
+  const snapshot = await getDocs(
+    query(
+      collection(db, "alerts", userId, "items"),
+      orderBy("createdAt", "desc")
+    )
+  );
+
+  return snapshot.docs.map((doc) => doc.data() as ScheduleChange);
+}
+
+/**
+ * Get all documents for dashboard
+ */
+export async function getDocuments(userId: string): Promise<Document[]> {
+  const snapshot = await getDocs(
+    collection(db, "documents", userId, "files")
+  );
+
+  return snapshot.docs.map((doc) => doc.data() as Document);
+}
+
+// ==================== HELPER FUNCTIONS ====================
+
+function determinePriority(dueDate: string): "high" | "medium" | "low" {
+  const days = Math.ceil(
+    (new Date(dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+  );
+
+  if (days < 2) return "high";
+  if (days < 7) return "medium";
+  return "low";
+}
+
+function getFileType(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  if (ext === "pdf") return "pdf";
+  if (ext === "doc" || ext === "docx") return "docx";
+  if (ext === "ppt" || ext === "pptx") return "ppt";
+  if (ext === "xls" || ext === "xlsx") return "xlsx";
+  return "other";
+}
+
+function categorizeDocument(filename: string): "assignment" | "lecture" | "notes" | "syllabus" {
+  const lower = filename.toLowerCase();
+  if (lower.includes("assignment") || lower.includes("hw") || lower.includes("homework")) return "assignment";
+  if (lower.includes("lecture") || lower.includes("slides")) return "lecture";
+  if (lower.includes("notes")) return "notes";
+  if (lower.includes("syllabus")) return "syllabus";
+  return "notes";
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}

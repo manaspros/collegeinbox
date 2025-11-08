@@ -87,65 +87,69 @@ export default function CriticalPathDashboard() {
   const CACHE_KEY = (userId: string) => `dashboard_analysis_${userId}`;
   const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
-  // Fetch and analyze emails
+  // Fetch dashboard data from Firestore (FAST - no API calls!)
   const fetchAnalysis = async (forceRefresh = false) => {
     if (!user) return;
-
-    // Check cache first (unless force refresh)
-    if (!forceRefresh) {
-      const cached = localStorage.getItem(CACHE_KEY(user.uid));
-      if (cached) {
-        try {
-          const { data, timestamp } = JSON.parse(cached);
-          const age = Date.now() - timestamp;
-
-          // Use cache if less than 30 minutes old
-          if (age < CACHE_DURATION) {
-            console.log(`Using cached data (${Math.round(age / 1000 / 60)} minutes old)`);
-            setAnalysisData(data);
-            setLastFetch(timestamp);
-            setLoading(false);
-            return;
-          }
-        } catch (e) {
-          console.error("Cache parse error:", e);
-        }
-      }
-    }
 
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch("/api/gmail/analyze", {
+      // Fetch data from Firestore (instant, no Gmail API calls!)
+      const response = await fetch(`/api/dashboard/data?userId=${user.uid}`, {
+        method: "GET",
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to fetch dashboard data");
+      }
+
+      setAnalysisData({
+        deadlines: result.data.deadlines || [],
+        scheduleChanges: result.data.scheduleChanges || [],
+        documents: result.data.documents || [],
+        categorization: {},
+      });
+
+      setLastFetch(Date.now());
+    } catch (err: any) {
+      setError(err.message);
+      console.error("Error fetching dashboard data:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Trigger email sync (background process)
+  const syncEmails = async () => {
+    if (!user) return;
+
+    try {
+      const response = await fetch("/api/sync-emails", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.uid,
-          maxEmails: 50  // Reduced from 100 to save quota
+          maxEmails: 50,
+          query: "newer_than:7d", // Last 7 days
         }),
       });
 
-      const data = await response.json();
+      const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to analyze emails");
+        throw new Error(result.error || "Failed to sync emails");
       }
 
-      // Save to cache
-      const timestamp = Date.now();
-      localStorage.setItem(
-        CACHE_KEY(user.uid),
-        JSON.stringify({ data: data.analysis, timestamp })
-      );
+      console.log("Email sync complete:", result);
 
-      setAnalysisData(data.analysis);
-      setLastFetch(timestamp);
+      // Refresh dashboard data
+      await fetchAnalysis(true);
     } catch (err: any) {
-      setError(err.message);
-      console.error("Error fetching analysis:", err);
-    } finally {
-      setLoading(false);
+      console.error("Error syncing emails:", err);
+      setError(`Sync failed: ${err.message}`);
     }
   };
 
@@ -162,11 +166,15 @@ export default function CriticalPathDashboard() {
         body: JSON.stringify({
           userId: user.uid,
           event: {
+            id: deadline.id, // Pass deadline ID to mark as synced
             title: `${deadline.course}: ${deadline.title}`,
             description: deadline.description,
+            dueDate: deadline.dueDate,
             startDate: deadline.dueDate,
             endDate: deadline.dueDate,
           },
+          addReminders: true,
+          reminderMinutes: [60, 1440], // 1 hour and 1 day before
         }),
       });
 
@@ -176,7 +184,10 @@ export default function CriticalPathDashboard() {
         throw new Error(data.error || "Failed to sync to calendar");
       }
 
-      alert("✅ Event added to your calendar!");
+      alert("✅ Event added to your calendar with reminders!");
+
+      // Refresh dashboard to show updated status
+      await fetchAnalysis(true);
     } catch (err: any) {
       alert(`❌ Error: ${err.message}`);
       console.error("Error syncing to calendar:", err);
@@ -248,14 +259,24 @@ export default function CriticalPathDashboard() {
             </Typography>
           )}
         </Box>
-        <Button
-          variant="outlined"
-          startIcon={<RefreshIcon />}
-          onClick={() => fetchAnalysis(true)}
-          disabled={loading}
-        >
-          Refresh
-        </Button>
+        <Box sx={{ display: "flex", gap: 1 }}>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={() => fetchAnalysis(true)}
+            disabled={loading}
+          >
+            Refresh
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={syncEmails}
+            disabled={loading}
+          >
+            Sync Emails
+          </Button>
+        </Box>
       </Box>
 
       {error && (
@@ -364,14 +385,16 @@ export default function CriticalPathDashboard() {
                               </Box>
                             }
                           />
-                          <Tooltip title="Add to Calendar">
+                          <Tooltip title={deadline.addedToCalendar ? "Already in Calendar" : "Add to Calendar"}>
                             <IconButton
-                              color="primary"
+                              color={deadline.addedToCalendar ? "success" : "primary"}
                               onClick={() => syncToCalendar(deadline)}
-                              disabled={syncingEvent === deadline.id}
+                              disabled={syncingEvent === deadline.id || deadline.addedToCalendar}
                             >
                               {syncingEvent === deadline.id ? (
                                 <CircularProgress size={24} />
+                              ) : deadline.addedToCalendar ? (
+                                <CalendarIcon />
                               ) : (
                                 <AddIcon />
                               )}

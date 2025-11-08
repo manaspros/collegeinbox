@@ -42,29 +42,53 @@ npm run verify:composio
   - `getConnectedAccountId(userId, toolkitSlug)` - Get active connection
   - `hasConnection(userId, app)` - Check connection status
 
-**3. Data Flow**
+**3. Agentic RAG System (`lib/agentic-rag.ts`)** ✨ NEW!
+- **Email-to-Vector Pipeline**: Converts emails to embeddings as soon as cached
+- **AI Agents**: Automatically extract deadlines, documents, alerts
+- **Firestore Storage**: Persistent data (no repeated API calls)
+- **Semantic Search**: Query emails using natural language
+- **Calendar Sync**: One-click reminders with auto-tracking
+
+**Key Functions:**
+  - `batchProcessEmails(userId, emails)` - Process emails through RAG pipeline
+  - `searchEmails(userId, query, topK)` - Semantic search over embeddings
+  - `getDeadlines(userId)` - Fetch deadlines from Firestore
+  - `getAlerts(userId)` - Fetch schedule changes
+  - `getDocuments(userId)` - Fetch document repository
+
+**4. Data Flow**
 ```
-User Query → /api/chat → Gemini + Composio Tools → Tool Execution → Stream Response
-                ↓
-            Fetch email context (RAG) for system prompt
-                ↓
-            Firestore cache (deadlines, documents, alerts)
+Email Sync → /api/sync-emails → Agentic RAG Pipeline → Firestore Storage
+                                    ↓
+                        ┌───────────┴───────────┐
+                        ▼                       ▼
+                   AI Agents              Vector Embeddings
+              (deadline/doc/alert)      (semantic search)
+                        ▼                       ▼
+                   Firestore              email_embeddings
+                (deadlines/docs/alerts)     collection
+                        ↓
+Dashboard → /api/dashboard/data → Read from Firestore (FAST, NO API calls!)
 ```
 
 ### Important File Locations
 
 **API Routes:**
 - `/app/api/chat/route.ts` - Main AI chat endpoint (streaming with tool calling)
+- `/app/api/sync-emails/route.ts` - **Email sync pipeline (NEW!)** - Triggers agentic RAG processing
+- `/app/api/dashboard/data/route.ts` - **Dashboard data (NEW!)** - Fast Firestore reads, no API calls
+- `/app/api/calendar/add-event/route.ts` - **Calendar sync (UPDATED!)** - With reminder tracking
 - `/app/api/integrations/connect/route.ts` - OAuth connection initiation
-- `/app/api/gmail/*` - Email operations (fetch, analyze, summarize)
-- `/app/api/rag/route.ts` - RAG sync/search (planned)
+- `/app/api/gmail/analyze/route.ts` - **DEPRECATED** - Use sync-emails + dashboard/data instead
 
 **Libraries:**
-- `lib/composio.ts` - Composio v3 SDK wrapper (THIS IS THE SOURCE OF TRUTH for Composio integration)
-- `lib/gemini.ts` - Gemini AI functions (categorization, summarization, extraction)
-- `lib/firebaseAdmin.ts` - Firebase Admin SDK setup
+- `lib/agentic-rag.ts` - **Agentic RAG pipeline (NEW!)** - Email processing, AI agents, semantic search
+- `lib/composio.ts` - Composio v3 SDK wrapper (source of truth for Composio integration)
+- `lib/gemini.ts` - Gemini AI functions (categorization, summarization, extraction, embeddings)
+- `lib/firebase.ts` - Firebase client SDK setup
 
 **Components:**
+- `components/CriticalPathDashboard.tsx` - **UPDATED** - Uses new efficient APIs
 - `components/ChatInterface.tsx` - AI chat UI with streaming
 - `components/IntegrationManager.tsx` - OAuth connection management
 
