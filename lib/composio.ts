@@ -1,6 +1,6 @@
-import { Composio } from "composio-core";
+import { Composio } from "@composio/core";
 
-// Initialize Composio client
+// Initialize Composio v3 client
 export const composio = new Composio({
   apiKey: process.env.COMPOSIO_API_KEY!,
 });
