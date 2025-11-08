@@ -137,9 +137,9 @@ export async function executeAction(
     console.log(`Connected Account ID: ${connectedAccountId || 'auto-detect'}`);
     console.log(`Parameters:`, JSON.stringify(params, null, 2));
 
-    // Build execution parameters
+    // Build execution parameters - use 'arguments' field (not 'input' or 'text')
     const executeParams: any = {
-      input: params, // v3 uses 'input' not 'arguments'
+      arguments: params, // Wrap params in 'arguments' field
     };
 
     // Option 1: Use existing connectedAccountId (fastest, no OAuth needed)

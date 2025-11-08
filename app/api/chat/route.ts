@@ -27,10 +27,10 @@ export async function POST(req: NextRequest) {
         console.log("Fetching emails for RAG context...");
         const emailsResult = await executeAction(
           userId,
-          "GMAIL_LIST_EMAILS",
+          "GMAIL_FETCH_EMAILS",
           {
             query: "newer_than:30d",
-            maxResults: 50,
+            max_results: 50,
           },
           gmailAccountId
         );

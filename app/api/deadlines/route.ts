@@ -79,10 +79,10 @@ export async function GET(req: NextRequest) {
     try {
       const gmailResult = await executeComposioAction(
         entity,
-        GMAIL_ACTIONS.LIST_EMAILS,
+        GMAIL_ACTIONS.FETCH_EMAILS,
         {
           query: "deadline OR due date OR submit by",
-          maxResults: 10,
+          max_results: 10,
         }
       );
 

@@ -89,15 +89,17 @@ export default function InboxPage() {
       }
 
       // Transform email data
-      const transformedEmails = (data.emails || []).map((email: any) => ({
-        id: email.id,
-        subject: email.subject || "(No Subject)",
-        from: email.from || "Unknown",
-        snippet: email.snippet || email.body?.substring(0, 150) || "",
-        date: email.date || new Date().toISOString(),
-        body: email.body || email.snippet,
-        hasAttachments: email.hasAttachments || false,
-        isUnread: email.isUnread !== false,
+      // API returns: { success: true, emails: { messages: [...] } }
+      const emailMessages = data.emails?.messages || [];
+      const transformedEmails = emailMessages.map((email: any) => ({
+        id: email.messageId || email.id,
+        subject: email.subject || email.payload?.headers?.find((h: any) => h.name === 'Subject')?.value || "(No Subject)",
+        from: email.sender || email.from || email.payload?.headers?.find((h: any) => h.name === 'From')?.value || "Unknown",
+        snippet: email.preview?.body || email.snippet || email.messageText?.substring(0, 150) || "",
+        date: email.messageTimestamp || email.date || new Date().toISOString(),
+        body: email.messageText || email.body || email.snippet,
+        hasAttachments: (email.attachmentList?.length || 0) > 0,
+        isUnread: email.labelIds?.includes('UNREAD') ?? true,
       }));
 
       setEmails(transformedEmails);

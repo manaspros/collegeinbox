@@ -31,10 +31,10 @@ export async function POST(req: NextRequest) {
     // Fetch recent emails from college domain using Composio v3
     const emailsResult = await executeAction(
       userId,
-      "GMAIL_LIST_EMAILS",
+      "GMAIL_FETCH_EMAILS",
       {
         query: "newer_than:30d",
-        maxResults: maxEmails,
+        max_results: maxEmails,
       },
       accountId // Pass connected account ID
     );

@@ -17,9 +17,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Fetch emails using Gmail API through Composio v3
-    const result = await executeAction(userId, "GMAIL_LIST_EMAILS", {
+    const result = await executeAction(userId, "GMAIL_FETCH_EMAILS", {
       query: query || "is:unread", // Default to unread emails
-      maxResults,
+      max_results: maxResults,
     });
 
     return NextResponse.json({
