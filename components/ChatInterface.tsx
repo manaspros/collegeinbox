@@ -23,23 +23,24 @@ import StorageIcon from "@mui/icons-material/Storage";
 export default function ChatInterface() {
   const { user } = useFirebaseAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [ragStatus, setRagStatus] = useState<{ deadlines: number; documents: number; alerts: number } | null>(null);
+  const [ragStatus, setRagStatus] = useState<{ emails: number } | null>(null);
 
-  // Fetch RAG data status
+  // Fetch RAG data status (number of vectorized emails)
   useEffect(() => {
     if (user) {
-      fetch(`/api/dashboard/data?userId=${user.uid}`)
+      fetch(`/api/rag/stats?userId=${user.uid}`)
         .then(res => res.json())
         .then(data => {
           if (data.success) {
             setRagStatus({
-              deadlines: data.data.deadlines?.length || 0,
-              documents: data.data.documents?.length || 0,
-              alerts: data.data.scheduleChanges?.length || 0,
+              emails: data.emailCount || 0,
             });
           }
         })
-        .catch(err => console.error('Failed to fetch RAG status:', err));
+        .catch(err => {
+          console.error('Failed to fetch RAG status:', err);
+          setRagStatus({ emails: 0 });
+        });
     }
   }, [user]);
 
@@ -87,27 +88,26 @@ export default function ChatInterface() {
           <Typography variant="h6" sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <SmartToyIcon /> AI Academic Assistant
           </Typography>
-          {ragStatus && (
-            <Box sx={{ display: "flex", gap: 0.5 }}>
-              <Chip
-                size="small"
-                label={`${ragStatus.deadlines} deadlines`}
-                sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', fontSize: '0.7rem' }}
-              />
-              <Chip
-                size="small"
-                label={`${ragStatus.documents} docs`}
-                sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', fontSize: '0.7rem' }}
-              />
-            </Box>
+          {ragStatus && ragStatus.emails > 0 && (
+            <Chip
+              size="small"
+              label={`${ragStatus.emails} emails indexed`}
+              icon={<StorageIcon sx={{ fontSize: '0.8rem' }} />}
+              sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', fontSize: '0.7rem' }}
+            />
           )}
         </Box>
         <Typography variant="caption">
           Ask me about deadlines, assignments, emails, and more!
         </Typography>
-        {ragStatus && (ragStatus.deadlines === 0 && ragStatus.documents === 0) && (
+        {ragStatus && ragStatus.emails === 0 && (
           <Typography variant="caption" sx={{ display: 'block', mt: 0.5, opacity: 0.9 }}>
             ℹ️ Sync your emails first to enable smart answers
+          </Typography>
+        )}
+        {ragStatus && ragStatus.emails > 0 && (
+          <Typography variant="caption" sx={{ display: 'block', mt: 0.5, opacity: 0.9, color: '#a5d6a7' }}>
+            ✓ Ready to answer questions from {ragStatus.emails} emails
           </Typography>
         )}
       </Box>
