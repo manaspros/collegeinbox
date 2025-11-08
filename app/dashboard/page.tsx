@@ -2,10 +2,14 @@
 
 import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 import { useRouter } from "next/navigation";
-import { Box, Container, Typography, Grid, AppBar, Toolbar, Button, IconButton, Tab, Tabs } from "@mui/material";
+import { Box, Container, Typography, AppBar, Toolbar, Button, IconButton, Tab, Tabs, Stack } from "@mui/material";
 import { useState } from "react";
 import ChatInterface from "@/components/ChatInterface";
 import CriticalPathDashboard from "@/components/CriticalPathDashboard";
+import DeadlinesList from "@/components/DeadlinesList";
+import DocumentRepository from "@/components/DocumentRepository";
+import AlertsFeed from "@/components/AlertsFeed";
+import VoiceAssistant from "@/components/VoiceAssistant";
 import LogoutIcon from "@mui/icons-material/Logout";
 import AnalyticsIcon from "@mui/icons-material/Analytics";
 import Link from "next/link";
@@ -71,14 +75,16 @@ export default function Dashboard() {
           Welcome back, {user.displayName || user.email}!
         </Typography>
 
-        <Grid container spacing={3}>
+        <Stack spacing={3}>
           {/* Critical Path Dashboard */}
-          <Grid item xs={12}>
+          <Box>
             <CriticalPathDashboard />
-          </Grid>
+          </Box>
 
-          {/* AI Chat Interface */}
-          <Grid item xs={12} lg={8}>
+          {/* Main Content - Two Column Layout */}
+          <Box sx={{ display: "flex", gap: 3, flexDirection: { xs: "column", lg: "row" } }}>
+            {/* AI Chat Interface */}
+            <Box sx={{ flex: { lg: "2 1 0" } }}>
             {/* Tabs for different views */}
             <Box sx={{ backgroundColor: "white", borderRadius: 2, boxShadow: 1, mb: 3 }}>
               <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
@@ -98,10 +104,10 @@ export default function Dashboard() {
               {activeTab === 3 && user && <AlertsFeed userId={user.uid} />}
               {activeTab === 4 && user && <VoiceAssistant userId={user.uid} onCommand={handleVoiceCommand} />}
             </Box>
-          </Grid>
+          </Box>
 
           {/* Right Column - Quick Stats Sidebar */}
-          <Grid item xs={12} lg={4}>
+          <Box sx={{ flex: { lg: "1 1 0" } }}>
             <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
               {/* Quick Actions */}
               <Box sx={{ backgroundColor: "white", p: 3, borderRadius: 2, boxShadow: 1 }}>
@@ -155,8 +161,9 @@ export default function Dashboard() {
                 </Typography>
               </Box>
             </Box>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
+        </Stack>
       </Container>
     </Box>
   );

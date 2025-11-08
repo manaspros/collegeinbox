@@ -137,7 +137,6 @@ export default function AlertsFeed({ userId }: { userId: string }) {
               sx={{
                 borderLeft: 4,
                 borderColor: `${getAlertColor(alert.kind)}.main`,
-                backgroundColor: `${getAlertColor(alert.kind)}.light`,
                 backgroundColor: (theme) =>
                   theme.palette.mode === "light"
                     ? `${getAlertColor(alert.kind)}.light`

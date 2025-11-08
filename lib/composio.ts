@@ -5,6 +5,18 @@ export const composio = new Composio({
   apiKey: process.env.COMPOSIO_API_KEY!,
 });
 
+// Get Composio entity for a user
+export function getComposioEntity(firebaseUid: string) {
+  return {
+    execute: async (actionName: string, params: any = {}) => {
+      return await composio.tools.execute(actionName, {
+        userId: firebaseUid,
+        arguments: params,
+      });
+    },
+  };
+}
+
 // Check if user has connected an app
 export async function hasConnection(firebaseUid: string, app: string) {
   try {

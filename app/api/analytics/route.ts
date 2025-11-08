@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
       // Get total and unread emails
       const profileResult = await entity.execute("gmail_get_profile", {});
       if (profileResult.data) {
-        totalEmails = profileResult.data.messagesTotal || 0;
+        totalEmails = Number(profileResult.data.messagesTotal) || 0;
       }
 
       // Get recent emails for weekly stats
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
         maxResults: 100,
       });
 
-      const emails = recentEmailsResult.data?.messages || [];
+      const emails = (recentEmailsResult.data?.messages || []) as any[];
       for (const email of emails) {
         const date = new Date(email.date || Date.now());
         const weekStart = format(startOfWeek(date), "MMM dd");
@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
         query: "is:unread",
         maxResults: 10,
       });
-      unreadEmails = unreadResult.data?.resultSizeEstimate || 0;
+      unreadEmails = Number(unreadResult.data?.resultSizeEstimate) || 0;
     } catch (err) {
       console.error("Error fetching Gmail stats:", err);
     }

@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      courses: result.data?.courses || result.courses || [],
+      courses: (result.data?.courses || []) as any[],
     });
   } catch (error: any) {
     console.error("Error fetching Google Classroom courses:", error);

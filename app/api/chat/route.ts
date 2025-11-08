@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
           gmailAccountId
         );
 
-        const emails = emailsResult.data?.messages || emailsResult.messages || [];
+        const emails = (emailsResult.data?.messages || []) as any[];
         if (emails.length > 0) {
           emailContext = `\n\n**RECENT EMAIL CONTEXT (Last 30 days):**\n`;
           emailContext += emails.slice(0, 30).map((email: any, idx: number) => {
@@ -93,7 +93,6 @@ Always prioritize accuracy. Use the email context above for quick answers, and u
         ...messages,
       ],
       tools: tools as any,
-      maxSteps: 5, // Allow multi-step tool usage
       onStepFinish: async ({ toolCalls, toolResults }) => {
         // Log tool executions for debugging
         if (toolCalls && toolCalls.length > 0) {
@@ -102,7 +101,7 @@ Always prioritize accuracy. Use the email context above for quick answers, and u
       },
     });
 
-    return result.toDataStreamResponse();
+    return result.toTextStreamResponse();
   } catch (error: any) {
     console.error("Error in chat route:", error);
     return new Response(

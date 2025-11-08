@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      materials: result.data?.materials || result.materials || [],
+      materials: (result.data?.materials || []) as any[],
     });
   } catch (error: any) {
     console.error("Error fetching Google Classroom materials:", error);

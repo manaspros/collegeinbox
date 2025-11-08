@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      assignments: result.data?.courseWork || result.courseWork || [],
+      assignments: (result.data?.courseWork || []) as any[],
     });
   } catch (error: any) {
     console.error("Error fetching Google Classroom assignments:", error);

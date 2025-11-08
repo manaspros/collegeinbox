@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
       accountId // Pass connected account ID
     );
 
-    const emails = emailsResult.data || emailsResult || [];
+    const emails = (emailsResult.data || []) as unknown as any[];
 
     // Initialize Gemini AI for analysis
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);

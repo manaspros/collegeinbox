@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
       accountId
     );
 
-    const emails = emailsResult.data?.messages || emailsResult.messages || [];
+    const emails = (emailsResult.data?.messages || []) as any[];
     console.log(`Fetched ${emails.length} emails`);
 
     // Step 3: Build context from emails

@@ -8,9 +8,9 @@ import {
   Container,
   Typography,
   Button,
-  Grid,
   Card,
   CardContent,
+  Stack,
 } from "@mui/material";
 import SchoolIcon from "@mui/icons-material/School";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
@@ -95,8 +95,8 @@ export default function Home() {
           Features
         </Typography>
 
-        <Grid container spacing={4}>
-          <Grid item xs={12} md={4}>
+        <Box sx={{ display: "flex", gap: 4, flexDirection: { xs: "column", md: "row" } }}>
+          <Box sx={{ flex: 1 }}>
             <Card sx={{ height: "100%", textAlign: "center" }}>
               <CardContent>
                 <SmartToyIcon sx={{ fontSize: 60, color: "#667eea", mb: 2 }} />
@@ -109,9 +109,9 @@ export default function Home() {
                 </Typography>
               </CardContent>
             </Card>
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} md={4}>
+          <Box sx={{ flex: 1 }}>
             <Card sx={{ height: "100%", textAlign: "center" }}>
               <CardContent>
                 <EmailIcon sx={{ fontSize: 60, color: "#667eea", mb: 2 }} />
@@ -124,9 +124,9 @@ export default function Home() {
                 </Typography>
               </CardContent>
             </Card>
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} md={4}>
+          <Box sx={{ flex: 1 }}>
             <Card sx={{ height: "100%", textAlign: "center" }}>
               <CardContent>
                 <CalendarTodayIcon sx={{ fontSize: 60, color: "#667eea", mb: 2 }} />
@@ -139,9 +139,9 @@ export default function Home() {
                 </Typography>
               </CardContent>
             </Card>
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} md={4}>
+          <Box sx={{ flex: 1 }}>
             <Card sx={{ height: "100%", textAlign: "center" }}>
               <CardContent>
                 <TrendingUpIcon sx={{ fontSize: 60, color: "#667eea", mb: 2 }} />
@@ -154,9 +154,9 @@ export default function Home() {
                 </Typography>
               </CardContent>
             </Card>
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} md={4}>
+          <Box sx={{ flex: 1 }}>
             <Card sx={{ height: "100%", textAlign: "center" }}>
               <CardContent>
                 <NotificationsActiveIcon sx={{ fontSize: 60, color: "#667eea", mb: 2 }} />
@@ -169,9 +169,9 @@ export default function Home() {
                 </Typography>
               </CardContent>
             </Card>
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} md={4}>
+          <Box sx={{ flex: 1 }}>
             <Card sx={{ height: "100%", textAlign: "center" }}>
               <CardContent>
                 <SchoolIcon sx={{ fontSize: 60, color: "#667eea", mb: 2 }} />
@@ -184,8 +184,8 @@ export default function Home() {
                 </Typography>
               </CardContent>
             </Card>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
       </Container>
 
       {/* CTA Section */}

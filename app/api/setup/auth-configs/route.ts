@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
         console.log(`Creating auth config for ${toolkit.label}...`);
 
         const newConfig = await composio.authConfigs.create(toolkit.name, {
+          type: "use_composio_managed_auth" as const,
           name: `${toolkit.label} (Auto-created)`,
           // Use Composio's default OAuth settings
         });

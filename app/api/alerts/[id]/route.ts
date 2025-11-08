@@ -4,7 +4,7 @@ import { db } from "@/lib/firebase";
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const userId = req.nextUrl.searchParams.get("userId");
@@ -12,7 +12,8 @@ export async function DELETE(
       return NextResponse.json({ error: "User ID required" }, { status: 400 });
     }
 
-    const alertRef = doc(db, `cache_alerts/${userId}/items/${params.id}`);
+    const { id } = await params;
+    const alertRef = doc(db, `cache_alerts/${userId}/items/${id}`);
     await deleteDoc(alertRef);
 
     return NextResponse.json({ success: true });
